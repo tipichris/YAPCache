@@ -25,6 +25,7 @@ define('APC_CACHE_CLICK_INDEX', 'cacheclickindex');
 define('APC_CACHE_CLICK_TIMER', 'cacheclicktimer');
 define('APC_CACHE_CLICK_KEY_PREFIX', 'cacheclicks-');
 define('APC_CACHE_CLICK_UPDATE_LOCK', 'cacheclickupdatelock');
+define('APC_CACHE_KEYWORD_PREFIX', 'cache-keyword-');
 define('APC_CACHE_ALL_OPTIONS', 'cache-get_all_options');
 define('APC_CACHE_YOURLS_INSTALLED', 'cache-yourls_installed');
 if(!defined('APC_CACHE_LONG_TIMEOUT')) {
@@ -101,8 +102,8 @@ function apc_cache_pre_get_keyword($args) {
 	$use_cache = isset($args[1]) ? $args[1] : true;
 	
 	// Lookup in cache
-	if($use_cache && apc_exists($keyword)) {
-		$ydb->infos[$keyword] = apc_fetch($keyword); 	
+	if($use_cache && apc_exists(apc_cache_get_keyword_key($keyword))) {
+		$ydb->infos[$keyword] = apc_fetch(apc_cache_get_keyword_key($keyword)); 	
 	}
 }
 
@@ -131,7 +132,7 @@ function apc_cache_get_keyword_infos($info, $keyword) {
  */
 function apc_cache_edit_link( $return, $url, $keyword, $newkeyword, $title, $new_url_already_there, $keyword_is_ok ) {
 	if($return['status'] != 'fail') {
-		apc_delete($keyword);
+		apc_delete(apc_cache_get_keyword_key($keyword));
 	}
 	return $return;
 }
@@ -254,6 +255,7 @@ function apc_cache_shunt_log_redirect($false, $keyword) {
 	}
 	
 	$args = array(
+		date( 'Y-m-d H:i:s' ),
 		yourls_sanitize_string( $keyword ),
 		( isset( $_SERVER['HTTP_REFERER'] ) ? yourls_sanitize_url( $_SERVER['HTTP_REFERER'] ) : 'direct' ),
 		yourls_get_user_agent(),
@@ -270,9 +272,9 @@ function apc_cache_shunt_log_redirect($false, $keyword) {
 		$added = apc_add($key, 0);
 	} 
 	
-	if(!$added) {
-		$logindex = apc_cache_key_increment($key);
-	}
+
+	$logindex = apc_cache_key_increment($key);
+
 	
 	// We now have a reserved logindex, so lets cache
 	apc_store(apc_cache_get_logindex($logindex), $args, APC_CACHE_LONG_TIMEOUT);
@@ -300,7 +302,7 @@ function apc_cache_write_log() {
 
 	$key = APC_CACHE_LOG_INDEX;
 	$index = apc_fetch($key);
-	$fetched = -1;
+	$fetched = 0;
 	$loop = true;
 	$values = array();
 	
@@ -326,14 +328,15 @@ function apc_cache_write_log() {
 		if(strlen($query)) {
 			$query .= ",";
 		}
-		$query .= "(NOW(), '" . 
+		$query .= "('" . 
 			$value[0] . "', '" . 
 			$value[1] . "', '" . 
 			$value[2] . "', '" . 
 			$value[3] . "', '" . 
-			$value[4] . "')";
+			$value[4] . "', '" . 
+			$value[5] . "')";
 	}
-
+	apc_cache_debug("Q: $query");
 	$ydb->query( "INSERT INTO `" . YOURLS_DB_TABLE_LOG . "` 
 				(click_time, shorturl, referrer, user_agent, ip_address, country_code)
 				VALUES " . $query);
@@ -348,6 +351,16 @@ function apc_cache_write_log() {
  */
 function apc_cache_get_logindex($key) {
 	return APC_CACHE_LOG_INDEX . "-" . $key;
+}
+
+/**
+ * Helper function to return a keyword key.
+ *
+ * @param string $key 
+ * @return string
+ */
+function apc_cache_get_keyword_key($keyword) {
+	return APC_CACHE_KEYWORD_PREFIX . $keyword;
 }
 
 /**
