@@ -157,7 +157,11 @@ function apc_cache_shunt_update_clicks($false, $keyword) {
 	if(!$added) {
 		apc_cache_key_increment($key);
 	}
-
+        
+        /* we need to keep a record of which keywords we have
+         * data cached for. We do this in an associative array
+         * stored at APC_CACHE_CLICK_INDEX, with keyword as the keyword
+         */
 	$idxkey = APC_CACHE_CLICK_INDEX;
 	if(apc_exists($idxkey)) {
 		$clickindex = apc_fetch($idxkey);
@@ -184,11 +188,16 @@ function apc_cache_write_clicks() {
 	$idxkey = APC_CACHE_CLICK_INDEX;
 	if(apc_exists($idxkey)) {
 		$clickindex = apc_fetch($idxkey);
-		apc_delete($idxkey); // TODO something here to check that it deleted, cycle through again if no
+		apc_delete($idxkey); // TODO something here to check that it deleted, cycle through again if no?
 	} else {
 		return;
 	}
 	
+	/* as long as the tables support transactions, it's much faster to wrap all the updates
+	 * up into a single transaction. Reduces the overhead of starting a transaction for each
+	 * query. The down side is that if one query errors we'll loose the log
+	 */
+	$ydb->query("START TRANSACTION");
 	foreach ($clickindex as $keyword => $z) {
 		$key = APC_CACHE_CLICK_KEY_PREFIX . $keyword;
 		$value = 0;
@@ -202,6 +211,8 @@ function apc_cache_write_clicks() {
 					"` SET `clicks` = clicks + " . $value . 
 					" WHERE `keyword` = '" . $keyword . "'");
 	}
+	apc_cache_debug("Committing changes");
+	$ydb->query("COMMIT");
 
 }
 
