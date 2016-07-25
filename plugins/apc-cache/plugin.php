@@ -218,48 +218,56 @@ function apc_cache_shunt_log_redirect($false, $keyword) {
 	// If we've been caching for over a certain amount do write
 	if(apc_add(APC_CACHE_LOG_TIMER, time(), APC_WRITE_CACHE_TIMEOUT)) {
 		// We can add, so lets flush the log cache
-		$key = APC_CACHE_LOG_INDEX;
-		$index = apc_fetch($key);
-		$fetched = -1;
-		$loop = true;
-		$values = array();
-		
-		// Retrieve all items and reset the counter
-		while($loop) {
-			for($i = $fetched+1; $i <= $index; $i++) {
-				$values[] = apc_fetch(apc_cache_get_logindex($i));
-			}
-			
-			$fetched = $index;
-			
-			if(apc_cas($key, $index, 0)) {
-				$loop = false;
-			} else {
-				usleep(500);
-			}
-		}
-
-		// Insert all log message - we're assuming input filtering happened earlier
-		$query = "";
-
-		foreach($values as $value) {
-			if(strlen($query)) {
-				$query .= ",";
-			}
-			$query .= "(NOW(), '" . 
-				$value[0] . "', '" . 
-				$value[1] . "', '" . 
-				$value[2] . "', '" . 
-				$value[3] . "', '" . 
-				$value[4] . "')";
-		}
-
-		$ydb->query( "INSERT INTO `" . YOURLS_DB_TABLE_LOG . "` 
-					(click_time, shorturl, referrer, user_agent, ip_address, country_code)
-					VALUES " . $query);
+		apc_cache_write_log();
 	} 
 	
 	return true;
+}
+
+function apc_cache_write_log() {
+	global $ydb;
+	apc_cache_debug("Writing log to database");
+
+	$key = APC_CACHE_LOG_INDEX;
+	$index = apc_fetch($key);
+	$fetched = -1;
+	$loop = true;
+	$values = array();
+	
+	// Retrieve all items and reset the counter
+	while($loop) {
+		for($i = $fetched+1; $i <= $index; $i++) {
+			$values[] = apc_fetch(apc_cache_get_logindex($i));
+		}
+		
+		$fetched = $index;
+		
+		if(apc_cas($key, $index, 0)) {
+			$loop = false;
+		} else {
+			usleep(500);
+		}
+	}
+
+	// Insert all log message - we're assuming input filtering happened earlier
+	$query = "";
+
+	foreach($values as $value) {
+		if(strlen($query)) {
+			$query .= ",";
+		}
+		$query .= "(NOW(), '" . 
+			$value[0] . "', '" . 
+			$value[1] . "', '" . 
+			$value[2] . "', '" . 
+			$value[3] . "', '" . 
+			$value[4] . "')";
+	}
+
+	$ydb->query( "INSERT INTO `" . YOURLS_DB_TABLE_LOG . "` 
+				(click_time, shorturl, referrer, user_agent, ip_address, country_code)
+				VALUES " . $query);
+
 }
 
 /**
@@ -302,4 +310,10 @@ function apc_cache_key_zero($key) {
 		$result = apc_cas($key, $old, 0);
 	} while(!$result && usleep(500));
 	return $old;
+}
+
+function apc_cache_debug ($msg) {
+	if (defined('APC_CACHE_DEBUG') && APC_CACHE_DEBUG) { 
+		error_log("yourls_apc_cache: " . $msg);
+	}
 }
