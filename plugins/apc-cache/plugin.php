@@ -29,7 +29,9 @@ define('APC_CACHE_YOURLS_INSTALLED', 'cache-yourls_installed');
 if(!defined('APC_CACHE_LONG_TIMEOUT')) {
 	define('APC_CACHE_LONG_TIMEOUT', 86400);
 }
-
+if(!defined('APC_CACHE_MAX_LOAD')) {
+	define('APC_CACHE_MAX_LOAD', 0.7);
+}
 yourls_add_action( 'pre_get_keyword', 'apc_cache_pre_get_keyword' );
 yourls_add_filter( 'get_keyword_infos', 'apc_cache_get_keyword_infos' );
 if(!defined('APC_CACHE_SKIP_CLICKTRACK')) {
@@ -183,6 +185,10 @@ function apc_cache_shunt_update_clicks($false, $keyword) {
  */
 function apc_cache_write_clicks() {
 	global $ydb;
+	if(apc_cache_load_too_high()) {
+		apc_cache_debug("System load too high. Won'd try writing clicks to database");
+		return;
+	}
 	apc_cache_debug("Writing clicks to database");
 
 	$idxkey = APC_CACHE_CLICK_INDEX;
@@ -271,6 +277,11 @@ function apc_cache_shunt_log_redirect($false, $keyword) {
  */
 function apc_cache_write_log() {
 	global $ydb;
+	
+	if(apc_cache_load_too_high()) {
+		apc_cache_debug("System load too high. Won'd try writing log to database");
+		return;
+	}
 	apc_cache_debug("Writing log to database");
 
 	$key = APC_CACHE_LOG_INDEX;
@@ -361,4 +372,15 @@ function apc_cache_debug ($msg) {
 	if (defined('APC_CACHE_DEBUG') && APC_CACHE_DEBUG) { 
 		error_log("yourls_apc_cache: " . $msg);
 	}
+}
+
+function apc_cache_load_too_high() {
+	if (stristr(PHP_OS, 'win')) {
+		// can't get load on Windows, so just assume it's OK
+		return false;
+	}
+	$load = sys_getloadavg();
+	if ($load[0] < APC_CACHE_MAX_LOAD) 
+		return false;
+	return true;
 }
