@@ -24,6 +24,7 @@ define('APC_CACHE_LOG_TIMER', 'cachelogtimer');
 define('APC_CACHE_CLICK_INDEX', 'cacheclickindex');
 define('APC_CACHE_CLICK_TIMER', 'cacheclicktimer');
 define('APC_CACHE_CLICK_KEY_PREFIX', 'cacheclicks-');
+define('APC_CACHE_CLICK_UPDATE_LOCK', 'cacheclickupdatelock');
 define('APC_CACHE_ALL_OPTIONS', 'cache-get_all_options');
 define('APC_CACHE_YOURLS_INSTALLED', 'cache-yourls_installed');
 if(!defined('APC_CACHE_LONG_TIMEOUT')) {
@@ -32,6 +33,10 @@ if(!defined('APC_CACHE_LONG_TIMEOUT')) {
 if(!defined('APC_CACHE_MAX_LOAD')) {
 	define('APC_CACHE_MAX_LOAD', 0.7);
 }
+if(!defined('APC_CACHE_MAX_CLICK_UPDATES')) {
+	define('APC_CACHE_MAX_CLICK_UPDATES', 200);
+}
+
 yourls_add_action( 'pre_get_keyword', 'apc_cache_pre_get_keyword' );
 yourls_add_filter( 'get_keyword_infos', 'apc_cache_get_keyword_infos' );
 if(!defined('APC_CACHE_SKIP_CLICKTRACK')) {
@@ -138,7 +143,6 @@ function apc_cache_edit_link( $return, $url, $keyword, $newkeyword, $title, $new
  * @param string $keyword
  */
 function apc_cache_shunt_update_clicks($false, $keyword) {
-	global $ydb;
 	
 	if(defined('APC_CACHE_STATS_SHUNT')) {
 		if(APC_CACHE_STATS_SHUNT == "drop") {
@@ -173,7 +177,8 @@ function apc_cache_shunt_update_clicks($false, $keyword) {
 	$clickindex[$keyword] = 1;
 	apc_store ( $idxkey, $clickindex);
 	
-	if(apc_add(APC_CACHE_CLICK_TIMER, time(), APC_WRITE_CACHE_TIMEOUT)) {
+	if(apc_add(APC_CACHE_CLICK_TIMER, time(), APC_WRITE_CACHE_TIMEOUT) 
+		|| apc_cache_click_updates_count_too_high()) {
 		apc_cache_write_clicks();
 	}
 	
@@ -190,12 +195,21 @@ function apc_cache_write_clicks() {
 		return;
 	}
 	apc_cache_debug("Writing clicks to database");
-
-	$idxkey = APC_CACHE_CLICK_INDEX;
-	if(apc_exists($idxkey)) {
-		$clickindex = apc_fetch($idxkey);
-		apc_delete($idxkey); // TODO something here to check that it deleted, cycle through again if no?
+	
+	// set up a lock so that another hit doesn't start writing too
+	if(!apc_add(APC_CACHE_CLICK_UPDATE_LOCK, 1, APC_WRITE_CACHE_TIMEOUT)) {
+		apc_cache_debug("Could not lock the click index. Abandoning write");
+	}
+	
+	if(apc_exists(APC_CACHE_CLICK_INDEX)) {
+		$clickindex = apc_fetch(APC_CACHE_CLICK_INDEX);
+		if(!apc_delete(APC_CACHE_CLICK_INDEX)) {
+			// if apc_delete fails it's because the key went away. We probably have a race condition
+			apc_cache_debug("Index key disappeared. Abandoning write");
+			return; 
+		}
 	} else {
+		// there's nothing to do
 		return;
 	}
 	
@@ -219,6 +233,7 @@ function apc_cache_write_clicks() {
 	}
 	apc_cache_debug("Committing changes");
 	$ydb->query("COMMIT");
+	apc_delete(APC_CACHE_CLICK_UPDATE_LOCK);
 
 }
 
@@ -229,7 +244,6 @@ function apc_cache_write_clicks() {
  * @param string $keyword
  */
 function apc_cache_shunt_log_redirect($false, $keyword) {
-	global $ydb;
 	
 	if(defined('APC_CACHE_STATS_SHUNT')) {
 		if(APC_CACHE_STATS_SHUNT == "drop") {
@@ -368,19 +382,43 @@ function apc_cache_key_zero($key) {
 	return $old;
 }
 
+/**
+ * Send debug messages to PHP's error log
+ */
 function apc_cache_debug ($msg) {
 	if (defined('APC_CACHE_DEBUG') && APC_CACHE_DEBUG) { 
 		error_log("yourls_apc_cache: " . $msg);
 	}
 }
 
+/**
+ * Check if the server load is above our maximum threshold for doing DB writes
+ */
 function apc_cache_load_too_high() {
-	if (stristr(PHP_OS, 'win')) {
+	if(APC_CACHE_MAX_LOAD == 0)
+		// APC_CACHE_MAX_LOAD of 0 means don't do load check
+		return false;
+	if (stristr(PHP_OS, 'win'))
 		// can't get load on Windows, so just assume it's OK
 		return false;
-	}
 	$load = sys_getloadavg();
 	if ($load[0] < APC_CACHE_MAX_LOAD) 
 		return false;
 	return true;
+}
+
+/**
+ * Check number of click updates that are cached
+ */
+function apc_cache_click_updates_count_too_high() {
+	if(APC_CACHE_MAX_CLICK_UPDATES == 0)
+		//APC_CACHE_MAX_CLICK_UPDATES of 0 means don't check 
+		return false;
+	if(apc_exists(APC_CACHE_CLICK_INDEX)) {
+		$clickindex = apc_fetch(APC_CACHE_CLICK_INDEX);
+		$count = count($clickindex);
+		if($count > APC_CACHE_MAX_CLICK_UPDATES)
+			return true;
+	}
+	return false;
 }
