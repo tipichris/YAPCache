@@ -21,6 +21,9 @@ if(!defined('APC_READ_CACHE_TIMEOUT')) {
 }
 define('APC_CACHE_LOG_INDEX', 'cachelogindex');
 define('APC_CACHE_LOG_TIMER', 'cachelogtimer');
+define('APC_CACHE_CLICK_INDEX', 'cacheclickindex');
+define('APC_CACHE_CLICK_TIMER', 'cacheclicktimer');
+define('APC_CACHE_CLICK_KEY_PREFIX', 'cacheclicks-');
 define('APC_CACHE_ALL_OPTIONS', 'cache-get_all_options');
 define('APC_CACHE_YOURLS_INSTALLED', 'cache-yourls_installed');
 if(!defined('APC_CACHE_LONG_TIMEOUT')) {
@@ -144,34 +147,62 @@ function apc_cache_shunt_update_clicks($false, $keyword) {
 	} 
 	
 	$keyword = yourls_sanitize_string( $keyword );
-	$timer = $keyword . "-=-timer";
-	$key = $keyword . "-=-clicks";
+	$key = APC_CACHE_CLICK_KEY_PREFIX . $keyword;
 	
-	if(apc_add($timer, time(), APC_WRITE_CACHE_TIMEOUT)) {
-		// Can add, so write right away
-		$value = 1;
+	// Store in cache
+	$added = false; 
+	if(!apc_exists($key)) {
+		$added = apc_add($key, 1);
+	}
+	if(!$added) {
+		apc_cache_key_increment($key);
+	}
+
+	$idxkey = APC_CACHE_CLICK_INDEX;
+	if(apc_exists($idxkey)) {
+		$clickindex = apc_fetch($idxkey);
+	} else {
+		$clickindex = array();
+	}
+	$clickindex[$keyword] = 1;
+	apc_store ( $idxkey, $clickindex);
+	
+	if(apc_add(APC_CACHE_CLICK_TIMER, time(), APC_WRITE_CACHE_TIMEOUT)) {
+		apc_cache_write_clicks();
+	}
+	
+	return true;
+}
+
+/**
+ * write any cached clicks out to the database 
+ */
+function apc_cache_write_clicks() {
+	global $ydb;
+	apc_cache_debug("Writing clicks to database");
+
+	$idxkey = APC_CACHE_CLICK_INDEX;
+	if(apc_exists($idxkey)) {
+		$clickindex = apc_fetch($idxkey);
+		apc_delete($idxkey); // TODO something here to check that it deleted, cycle through again if no
+	} else {
+		return;
+	}
+	
+	foreach ($clickindex as $keyword => $z) {
+		$key = APC_CACHE_CLICK_KEY_PREFIX . $keyword;
+		$value = 0;
 		if(apc_exists($key)) {
 			$value += apc_cache_key_zero($key);
 		}
+		apc_cache_debug("Adding $value clicks for $keyword");
 		// Write value to DB
 		$ydb->query("UPDATE `" . 
 						YOURLS_DB_TABLE_URL. 
 					"` SET `clicks` = clicks + " . $value . 
 					" WHERE `keyword` = '" . $keyword . "'");
-		
-	} else {
-		// Store in cache
-		$added = false; 
-		if(!apc_exists($key)) {
-			$added = apc_add($key, 1);
-		}
-		
-		if(!$added) {
-			apc_cache_key_increment($key);
-		}
 	}
-	
-	return true;
+
 }
 
 /**
@@ -224,6 +255,9 @@ function apc_cache_shunt_log_redirect($false, $keyword) {
 	return true;
 }
 
+/**
+ * write any cached log entries out to the database 
+ */
 function apc_cache_write_log() {
 	global $ydb;
 	apc_cache_debug("Writing log to database");
