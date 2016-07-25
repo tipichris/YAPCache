@@ -115,7 +115,7 @@ function apc_cache_pre_get_keyword($args) {
  */
 function apc_cache_get_keyword_infos($info, $keyword) {
 	// Store in cache
-	apc_store($keyword, $info, APC_READ_CACHE_TIMEOUT);
+	apc_store(apc_cache_get_keyword_key($keyword), $info, APC_READ_CACHE_TIMEOUT);
 	return $info;
 }
 
