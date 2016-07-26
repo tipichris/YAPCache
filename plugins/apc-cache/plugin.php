@@ -21,6 +21,7 @@ if(!defined('APC_READ_CACHE_TIMEOUT')) {
 }
 define('APC_CACHE_LOG_INDEX', 'cachelogindex');
 define('APC_CACHE_LOG_TIMER', 'cachelogtimer');
+define('APC_CACHE_LOG_UPDATE_LOCK', 'cachelogupdatelock');
 define('APC_CACHE_CLICK_INDEX', 'cacheclickindex');
 define('APC_CACHE_CLICK_TIMER', 'cacheclicktimer');
 define('APC_CACHE_CLICK_KEY_PREFIX', 'cacheclicks-');
@@ -28,6 +29,7 @@ define('APC_CACHE_CLICK_UPDATE_LOCK', 'cacheclickupdatelock');
 define('APC_CACHE_KEYWORD_PREFIX', 'cache-keyword-');
 define('APC_CACHE_ALL_OPTIONS', 'cache-get_all_options');
 define('APC_CACHE_YOURLS_INSTALLED', 'cache-yourls_installed');
+define('APC_CACHE_BACKOFF_KEY', 'cachebackoff');
 if(!defined('APC_CACHE_LONG_TIMEOUT')) {
 	define('APC_CACHE_LONG_TIMEOUT', 86400);
 }
@@ -37,7 +39,12 @@ if(!defined('APC_CACHE_MAX_LOAD')) {
 if(!defined('APC_CACHE_MAX_CLICK_UPDATES')) {
 	define('APC_CACHE_MAX_CLICK_UPDATES', 200);
 }
-
+if(!defined('APC_CACHE_BACKOFF_TIME')) {
+	define('APC_CACHE_BACKOFF_TIME', 30);
+}
+if(!defined('APC_WRITE_CACHE_HARD_TIMEOUT')) {
+	define('APC_WRITE_CACHE_HARD_TIMEOUT', 600);
+}
 yourls_add_action( 'pre_get_keyword', 'apc_cache_pre_get_keyword' );
 yourls_add_filter( 'get_keyword_infos', 'apc_cache_get_keyword_infos' );
 if(!defined('APC_CACHE_SKIP_CLICKTRACK')) {
@@ -145,6 +152,9 @@ function apc_cache_edit_link( $return, $url, $keyword, $newkeyword, $title, $new
  */
 function apc_cache_shunt_update_clicks($false, $keyword) {
 	
+	// initalize the timer. If it already exists apc_add will fail
+	apc_add(APC_CACHE_CLICK_TIMER, time());
+	
 	if(defined('APC_CACHE_STATS_SHUNT')) {
 		if(APC_CACHE_STATS_SHUNT == "drop") {
 			return true;
@@ -178,7 +188,7 @@ function apc_cache_shunt_update_clicks($false, $keyword) {
 	$clickindex[$keyword] = 1;
 	apc_store ( $idxkey, $clickindex);
 	
-	if(apc_add(APC_CACHE_CLICK_TIMER, time(), APC_WRITE_CACHE_TIMEOUT) 
+	if(apc_cache_write_needed('click') 
 		|| apc_cache_click_updates_count_too_high()) {
 		apc_cache_write_clicks();
 	}
@@ -191,10 +201,6 @@ function apc_cache_shunt_update_clicks($false, $keyword) {
  */
 function apc_cache_write_clicks() {
 	global $ydb;
-	if(apc_cache_load_too_high()) {
-		apc_cache_debug("System load too high. Won't try writing clicks to database", true);
-		return;
-	}
 	apc_cache_debug("Writing clicks to database");
 	
 	// set up a lock so that another hit doesn't start writing too
@@ -234,6 +240,7 @@ function apc_cache_write_clicks() {
 	}
 	apc_cache_debug("Committing changes");
 	$ydb->query("COMMIT");
+	apc_store(APC_CACHE_CLICK_TIMER, time());
 	apc_delete(APC_CACHE_CLICK_UPDATE_LOCK);
 
 }
@@ -245,6 +252,9 @@ function apc_cache_write_clicks() {
  * @param string $keyword
  */
 function apc_cache_shunt_log_redirect($false, $keyword) {
+
+	// Initialise the time. If a timer already exists apc_add will fail
+	apc_add(APC_CACHE_LOG_TIMER, time());
 	
 	if(defined('APC_CACHE_STATS_SHUNT')) {
 		if(APC_CACHE_STATS_SHUNT == "drop") {
@@ -280,7 +290,7 @@ function apc_cache_shunt_log_redirect($false, $keyword) {
 	apc_store(apc_cache_get_logindex($logindex), $args, APC_CACHE_LONG_TIMEOUT);
 	
 	// If we've been caching for over a certain amount do write
-	if(apc_add(APC_CACHE_LOG_TIMER, time(), APC_WRITE_CACHE_TIMEOUT)) {
+	if(apc_cache_write_needed('log')) {
 		// We can add, so lets flush the log cache
 		apc_cache_write_log();
 	} 
@@ -294,9 +304,9 @@ function apc_cache_shunt_log_redirect($false, $keyword) {
 function apc_cache_write_log() {
 	global $ydb;
 	
-	if(apc_cache_load_too_high()) {
-		apc_cache_debug("System load too high. Won't try writing log to database", true);
-		return;
+	// set up a lock so that another hit doesn't start writing too
+	if(!apc_add(APC_CACHE_LOG_UPDATE_LOCK, 1, APC_WRITE_CACHE_TIMEOUT)) {
+		apc_cache_debug("Could not lock the log index. Abandoning write", true);
 	}
 	apc_cache_debug("Writing log to database");
 
@@ -336,10 +346,12 @@ function apc_cache_write_log() {
 			$value[4] . "', '" . 
 			$value[5] . "')";
 	}
-	apc_cache_debug("Q: $query");
+	// apc_cache_debug("Q: $query");
 	$ydb->query( "INSERT INTO `" . YOURLS_DB_TABLE_LOG . "` 
 				(click_time, shorturl, referrer, user_agent, ip_address, country_code)
 				VALUES " . $query);
+	apc_store(APC_CACHE_LOG_TIMER, time());
+	apc_delete(APC_CACHE_LOG_UPDATE_LOCK);
 
 }
 
@@ -430,8 +442,55 @@ function apc_cache_click_updates_count_too_high() {
 	if(apc_exists(APC_CACHE_CLICK_INDEX)) {
 		$clickindex = apc_fetch(APC_CACHE_CLICK_INDEX);
 		$count = count($clickindex);
-		if($count > APC_CACHE_MAX_CLICK_UPDATES)
+		apc_cache_debug("$count click updates in cache");
+		if($count > APC_CACHE_MAX_CLICK_UPDATES) {
+			if(apc_cache_load_too_high()) {
+				apc_cache_debug("System load too high. Won't try writing clicks to database", true);
+				apc_add(APC_CACHE_BACKOFF_KEY, time(), APC_CACHE_BACKOFF_TIME);
+				return false;
+			}
 			return true;
+		}
 	}
 	return false;
+}
+
+function apc_cache_write_needed($type) {
+	if($type == 'click') {
+		$timerkey = APC_CACHE_CLICK_TIMER;
+	} elseif ($type = 'log') {
+		$timerkey = APC_CACHE_LOG_TIMER;
+	} else {
+		return false;
+	}
+
+	if(apc_exists($timerkey)) {
+		$lastupdate = apc_fetch($timerkey);
+		apc_cache_debug("Last $type write at " . strftime("%T" , $lastupdate));
+		
+		if (time() > $lastupdate + APC_WRITE_CACHE_HARD_TIMEOUT) {
+			apc_cache_debug("Reached hard timeout. Forcing write for $type");
+			return true;
+		}
+		
+		if(apc_exists(APC_CACHE_BACKOFF_KEY)) {
+			apc_cache_debug("Won't do write for $type during backoff period");
+			return false;
+		}
+		
+		if(time() > $lastupdate + APC_WRITE_CACHE_TIMEOUT) {
+			if(apc_cache_load_too_high()) {
+				apc_cache_debug("System load too high. Won't try writing to database for $type", true);
+				apc_add(APC_CACHE_BACKOFF_KEY, time(), APC_CACHE_BACKOFF_TIME);
+				return false;
+			}
+			return true;
+		}
+		return false;
+	}
+	
+	// key went away. Better do an update to be safe
+	apc_cache_debug("No $type timer found");
+	return true;
+	
 }
