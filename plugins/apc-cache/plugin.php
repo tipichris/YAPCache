@@ -295,7 +295,7 @@ function apc_cache_write_log() {
 	global $ydb;
 	
 	if(apc_cache_load_too_high()) {
-		apc_cache_debug("System load too high. Won'd try writing log to database", true);
+		apc_cache_debug("System load too high. Won't try writing log to database", true);
 		return;
 	}
 	apc_cache_debug("Writing log to database");
