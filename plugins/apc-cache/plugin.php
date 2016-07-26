@@ -192,21 +192,21 @@ function apc_cache_shunt_update_clicks($false, $keyword) {
 function apc_cache_write_clicks() {
 	global $ydb;
 	if(apc_cache_load_too_high()) {
-		apc_cache_debug("System load too high. Won'd try writing clicks to database");
+		apc_cache_debug("System load too high. Won't try writing clicks to database", true);
 		return;
 	}
 	apc_cache_debug("Writing clicks to database");
 	
 	// set up a lock so that another hit doesn't start writing too
 	if(!apc_add(APC_CACHE_CLICK_UPDATE_LOCK, 1, APC_WRITE_CACHE_TIMEOUT)) {
-		apc_cache_debug("Could not lock the click index. Abandoning write");
+		apc_cache_debug("Could not lock the click index. Abandoning write", true);
 	}
 	
 	if(apc_exists(APC_CACHE_CLICK_INDEX)) {
 		$clickindex = apc_fetch(APC_CACHE_CLICK_INDEX);
 		if(!apc_delete(APC_CACHE_CLICK_INDEX)) {
 			// if apc_delete fails it's because the key went away. We probably have a race condition
-			apc_cache_debug("Index key disappeared. Abandoning write");
+			apc_cache_debug("Index key disappeared. Abandoning write", true);
 			return; 
 		}
 	} else {
@@ -295,7 +295,7 @@ function apc_cache_write_log() {
 	global $ydb;
 	
 	if(apc_cache_load_too_high()) {
-		apc_cache_debug("System load too high. Won'd try writing log to database");
+		apc_cache_debug("System load too high. Won'd try writing log to database", true);
 		return;
 	}
 	apc_cache_debug("Writing log to database");
@@ -398,8 +398,8 @@ function apc_cache_key_zero($key) {
 /**
  * Send debug messages to PHP's error log
  */
-function apc_cache_debug ($msg) {
-	if (defined('APC_CACHE_DEBUG') && APC_CACHE_DEBUG) { 
+function apc_cache_debug ($msg, $important=false) {
+	if ($important || (defined('APC_CACHE_DEBUG') && APC_CACHE_DEBUG)) { 
 		error_log("yourls_apc_cache: " . $msg);
 	}
 }
