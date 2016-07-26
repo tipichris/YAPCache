@@ -56,7 +56,7 @@ yourls_add_filter( 'get_all_options', 'apc_cache_get_all_options' );
 yourls_add_filter( 'activated_plugin', 'apc_cache_plugin_statechange' );
 yourls_add_filter( 'deactivated_plugin', 'apc_cache_plugin_statechange' );
 yourls_add_filter( 'edit_link', 'apc_cache_edit_link' );
-
+yourls_add_filter( 'api_actions', 'apc_cache_api_filter' );
 /**
  * Return cached options is available
  *
@@ -202,7 +202,7 @@ function apc_cache_shunt_update_clicks($false, $keyword) {
 function apc_cache_write_clicks() {
 	global $ydb;
 	apc_cache_debug("Writing clicks to database");
-	
+	$updates = 0;
 	// set up a lock so that another hit doesn't start writing too
 	if(!apc_add(APC_CACHE_CLICK_UPDATE_LOCK, 1, APC_WRITE_CACHE_TIMEOUT)) {
 		apc_cache_debug("Could not lock the click index. Abandoning write", true);
@@ -213,11 +213,11 @@ function apc_cache_write_clicks() {
 		if(!apc_delete(APC_CACHE_CLICK_INDEX)) {
 			// if apc_delete fails it's because the key went away. We probably have a race condition
 			apc_cache_debug("Index key disappeared. Abandoning write", true);
-			return; 
+			return $updates; 
 		}
 	} else {
 		// there's nothing to do
-		return;
+		return $updates;
 	}
 	
 	/* as long as the tables support transactions, it's much faster to wrap all the updates
@@ -237,12 +237,13 @@ function apc_cache_write_clicks() {
 						YOURLS_DB_TABLE_URL. 
 					"` SET `clicks` = clicks + " . $value . 
 					" WHERE `keyword` = '" . $keyword . "'");
+		$updates++;
 	}
 	apc_cache_debug("Committing changes");
 	$ydb->query("COMMIT");
 	apc_store(APC_CACHE_CLICK_TIMER, time());
 	apc_delete(APC_CACHE_CLICK_UPDATE_LOCK);
-
+	return $updates;
 }
 
 /**
@@ -303,7 +304,7 @@ function apc_cache_shunt_log_redirect($false, $keyword) {
  */
 function apc_cache_write_log() {
 	global $ydb;
-	
+	$updates = 0;
 	// set up a lock so that another hit doesn't start writing too
 	if(!apc_add(APC_CACHE_LOG_UPDATE_LOCK, 1, APC_WRITE_CACHE_TIMEOUT)) {
 		apc_cache_debug("Could not lock the log index. Abandoning write", true);
@@ -345,6 +346,7 @@ function apc_cache_write_log() {
 			$value[3] . "', '" . 
 			$value[4] . "', '" . 
 			$value[5] . "')";
+		$updates++;
 	}
 	// apc_cache_debug("Q: $query");
 	$ydb->query( "INSERT INTO `" . YOURLS_DB_TABLE_LOG . "` 
@@ -352,6 +354,7 @@ function apc_cache_write_log() {
 				VALUES " . $query);
 	apc_store(APC_CACHE_LOG_TIMER, time());
 	apc_delete(APC_CACHE_LOG_UPDATE_LOCK);
+	return $updates;
 
 }
 
@@ -455,7 +458,17 @@ function apc_cache_click_updates_count_too_high() {
 	return false;
 }
 
+/**
+ * Check if we need to do a write to DB yet
+ * Considers time since last write, system load etc
+ */
+
 function apc_cache_write_needed($type) {
+	// APC_WRITE_CACHE_TIMEOUT of 0 means never update without
+	// an API call
+	if(APC_WRITE_CACHE_TIMEOUT == 0)
+		return false;
+		
 	if($type == 'click') {
 		$timerkey = APC_CACHE_CLICK_TIMER;
 	} elseif ($type = 'log') {
@@ -493,4 +506,23 @@ function apc_cache_write_needed($type) {
 	apc_cache_debug("No $type timer found");
 	return true;
 	
+}
+
+function apc_cache_api_filter($api_actions) {
+	$api_actions['flushcache'] = 'apc_cache_force_flush';
+	return $api_actions;
+}
+
+function apc_cache_force_flush() {
+	apc_cache_debug("Forcing write to database from API call");
+	$log_updates = apc_cache_write_log();
+	$click_updates = apc_cache_write_clicks();
+	$return = array(
+		'clicksUpdated'   => $click_updates,
+		'logsUpdated' => $log_updates,
+		'statusCode' => 200,
+		'simple'     => "Updated clicks for $click_updates URLs. Logged $log_updates hits.",
+		'message'    => 'success',
+	);
+	return $return;
 }
