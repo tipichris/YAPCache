@@ -28,11 +28,11 @@ define('APC_CACHE_YOURLS_INSTALLED', APC_CACHE_ID . 'yourls_installed');
 define('APC_CACHE_BACKOFF_KEY', APC_CACHE_ID . 'backoff');
 
 // configurable options
-if(!defined('APC_WRITE_CACHE_TIMEOUT')) {
-	define('APC_WRITE_CACHE_TIMEOUT', 120);
+if(!defined('APC_CACHE_WRITE_TIMEOUT')) {
+	define('APC_CACHE_WRITE_TIMEOUT', 120);
 }
-if(!defined('APC_READ_CACHE_TIMEOUT')) {
-	define('APC_READ_CACHE_TIMEOUT', 360);
+if(!defined('APC_CACHE_READ_TIMEOUT')) {
+	define('APC_CACHE_READ_TIMEOUT', 360);
 }
 if(!defined('APC_CACHE_LONG_TIMEOUT')) {
 	define('APC_CACHE_LONG_TIMEOUT', 86400);
@@ -46,8 +46,11 @@ if(!defined('APC_CACHE_MAX_UPDATES')) {
 if(!defined('APC_CACHE_BACKOFF_TIME')) {
 	define('APC_CACHE_BACKOFF_TIME', 30);
 }
-if(!defined('APC_WRITE_CACHE_HARD_TIMEOUT')) {
-	define('APC_WRITE_CACHE_HARD_TIMEOUT', 600);
+if(!defined('APC_CACHE_WRITE_HARD_TIMEOUT')) {
+	define('APC_CACHE_WRITE_HARD_TIMEOUT', 600);
+}
+if(!defined('APC_CACHE_LOCK_TIMEOUT')) {
+	define('APC_CACHE_LOCK_TIMEOUT', 30);
 }
 if(!defined('APC_CACHE_API_USER')) {
 	define('APC_CACHE_API_USER', '');
@@ -92,9 +95,9 @@ function apc_cache_shunt_all_options($false) {
  * @return array options
  */
 function apc_cache_get_all_options($option) {
-	apc_store(APC_CACHE_ALL_OPTIONS, $option, APC_READ_CACHE_TIMEOUT);
-        // Set timeout on installed property twice as long as the options as otherwise there could be a split second gap
-	apc_store(APC_CACHE_YOURLS_INSTALLED, true, (2 * APC_READ_CACHE_TIMEOUT));
+	apc_store(APC_CACHE_ALL_OPTIONS, $option, APC_CACHE_READ_TIMEOUT);
+	// Set timeout on installed property twice as long as the options as otherwise there could be a split second gap
+	apc_store(APC_CACHE_YOURLS_INSTALLED, true, (2 * APC_CACHE_READ_TIMEOUT));
 	return $option;
 }
 
@@ -104,7 +107,7 @@ function apc_cache_get_all_options($option) {
  * @param string $plugin 
  */
 function apc_cache_plugin_statechange($plugin) {
-        apc_delete(APC_CACHE_ALL_OPTIONS);
+	apc_delete(APC_CACHE_ALL_OPTIONS);
 }
 
 /**
@@ -131,7 +134,7 @@ function apc_cache_pre_get_keyword($args) {
  */
 function apc_cache_get_keyword_infos($info, $keyword) {
 	// Store in cache
-	apc_store(apc_cache_get_keyword_key($keyword), $info, APC_READ_CACHE_TIMEOUT);
+	apc_store(apc_cache_get_keyword_key($keyword), $info, APC_CACHE_READ_TIMEOUT);
 	return $info;
 }
 
@@ -161,8 +164,10 @@ function apc_cache_edit_link( $return, $url, $keyword, $newkeyword, $title, $new
  */
 function apc_cache_shunt_update_clicks($false, $keyword) {
 	
-	// initalize the timer. If it already exists apc_add will fail
-	apc_add(APC_CACHE_CLICK_TIMER, time());
+	// initalize the timer. 
+	if(!apc_exists(APC_CACHE_CLICK_TIMER)) {
+		apc_add(APC_CACHE_CLICK_TIMER, time());
+	}
 	
 	if(defined('APC_CACHE_STATS_SHUNT')) {
 		if(APC_CACHE_STATS_SHUNT == "drop") {
@@ -183,11 +188,11 @@ function apc_cache_shunt_update_clicks($false, $keyword) {
 	if(!$added) {
 		apc_cache_key_increment($key);
 	}
-        
-        /* we need to keep a record of which keywords we have
-         * data cached for. We do this in an associative array
-         * stored at APC_CACHE_CLICK_INDEX, with keyword as the keyword
-         */
+  
+	/* we need to keep a record of which keywords we have
+	 * data cached for. We do this in an associative array
+	 * stored at APC_CACHE_CLICK_INDEX, with keyword as the keyword
+	 */
 	$idxkey = APC_CACHE_CLICK_INDEX;
 	if(apc_exists($idxkey)) {
 		$clickindex = apc_fetch($idxkey);
@@ -212,7 +217,7 @@ function apc_cache_write_clicks() {
 	apc_cache_debug("Writing clicks to database");
 	$updates = 0;
 	// set up a lock so that another hit doesn't start writing too
-	if(!apc_add(APC_CACHE_CLICK_UPDATE_LOCK, 1, APC_WRITE_CACHE_TIMEOUT)) {
+	if(!apc_add(APC_CACHE_CLICK_UPDATE_LOCK, 1, APC_CACHE_LOCK_TIMEOUT)) {
 		apc_cache_debug("Could not lock the click index. Abandoning write", true);
 	}
 	
@@ -223,33 +228,30 @@ function apc_cache_write_clicks() {
 			apc_cache_debug("Index key disappeared. Abandoning write", true);
 			return $updates; 
 		}
-	} else {
-		// there's nothing to do
-		return $updates;
-	}
-	
-	/* as long as the tables support transactions, it's much faster to wrap all the updates
-	 * up into a single transaction. Reduces the overhead of starting a transaction for each
-	 * query. The down side is that if one query errors we'll loose the log
-	 */
-	$ydb->query("START TRANSACTION");
-	foreach ($clickindex as $keyword => $z) {
-		$key = APC_CACHE_CLICK_KEY_PREFIX . $keyword;
-		$value = 0;
-		if(apc_exists($key)) {
-			$value += apc_cache_key_zero($key);
+
+		/* as long as the tables support transactions, it's much faster to wrap all the updates
+		* up into a single transaction. Reduces the overhead of starting a transaction for each
+		* query. The down side is that if one query errors we'll loose the log
+		*/
+		$ydb->query("START TRANSACTION");
+		foreach ($clickindex as $keyword => $z) {
+			$key = APC_CACHE_CLICK_KEY_PREFIX . $keyword;
+			$value = 0;
+			if(apc_exists($key)) {
+				$value += apc_cache_key_zero($key);
+			}
+			apc_cache_debug("Adding $value clicks for $keyword");
+			// Write value to DB
+			$ydb->query("UPDATE `" . 
+							YOURLS_DB_TABLE_URL. 
+						"` SET `clicks` = clicks + " . $value . 
+						" WHERE `keyword` = '" . $keyword . "'");
+			$updates++;
 		}
-		apc_cache_debug("Adding $value clicks for $keyword");
-		// Write value to DB
-		$ydb->query("UPDATE `" . 
-						YOURLS_DB_TABLE_URL. 
-					"` SET `clicks` = clicks + " . $value . 
-					" WHERE `keyword` = '" . $keyword . "'");
-		$updates++;
+		apc_cache_debug("Committing changes");
+		$ydb->query("COMMIT");
+		apc_store(APC_CACHE_CLICK_TIMER, time());
 	}
-	apc_cache_debug("Committing changes");
-	$ydb->query("COMMIT");
-	apc_store(APC_CACHE_CLICK_TIMER, time());
 	apc_delete(APC_CACHE_CLICK_UPDATE_LOCK);
 	apc_cache_debug("Updated click records for $updates URLs");
 	return $updates;
@@ -263,8 +265,10 @@ function apc_cache_write_clicks() {
  */
 function apc_cache_shunt_log_redirect($false, $keyword) {
 
-	// Initialise the time. If a timer already exists apc_add will fail
-	apc_add(APC_CACHE_LOG_TIMER, time());
+	// Initialise the time.
+	if(!apc_exists(APC_CACHE_LOG_TIMER)) {
+		apc_add(APC_CACHE_LOG_TIMER, time());
+	}
 	
 	if(defined('APC_CACHE_STATS_SHUNT')) {
 		if(APC_CACHE_STATS_SHUNT == "drop") {
@@ -315,7 +319,7 @@ function apc_cache_write_log() {
 	global $ydb;
 	$updates = 0;
 	// set up a lock so that another hit doesn't start writing too
-	if(!apc_add(APC_CACHE_LOG_UPDATE_LOCK, 1, APC_WRITE_CACHE_TIMEOUT)) {
+	if(!apc_add(APC_CACHE_LOG_UPDATE_LOCK, 1, APC_CACHE_LOCK_TIMEOUT)) {
 		apc_cache_debug("Could not lock the log index. Abandoning write", true);
 	}
 	apc_cache_debug("Writing log to database");
@@ -493,22 +497,28 @@ function apc_cache_write_needed($type) {
 		apc_cache_debug("Last $type write $elapsed seconds ago at " . strftime("%T" , $lastupdate));
 		
 		/**
-		 * in the tests below APC_WRITE_CACHE_TIMEOUT of 0 means never do a write on the basis of
+		 * in the tests below APC_CACHE_WRITE_TIMEOUT of 0 means never do a write on the basis of
 		 * time elapsed, APC_CACHE_MAX_UPDATES of 0 means never do a write on the basis of number 
 		 * of queued updates
 		 **/
-		if ( !empty(APC_WRITE_CACHE_TIMEOUT) && $elapsed > APC_WRITE_CACHE_HARD_TIMEOUT) {
+		 
+		// if we reached APC_CACHE_WRITE_HARD_TIMEOUT force a write out no matter what
+		if ( !empty(APC_CACHE_WRITE_TIMEOUT) && $elapsed > APC_CACHE_WRITE_HARD_TIMEOUT) {
 			apc_cache_debug("Reached hard timeout. Forcing write for $type");
 			return true;
 		}
 		
+		// if we've backed off because of server load, don't write
 		if( apc_exists(APC_CACHE_BACKOFF_KEY)) {
 			apc_cache_debug("Won't do write for $type during backoff period");
 			return false;
 		}
 		
-		if(( !empty(APC_WRITE_CACHE_TIMEOUT) && $elapsed > APC_WRITE_CACHE_TIMEOUT )
+		// have we either reached APC_CACHE_WRITE_TIMEOUT or exceeded APC_CACHE_MAX_UPDATES
+		if(( !empty(APC_CACHE_WRITE_TIMEOUT) && $elapsed > APC_CACHE_WRITE_TIMEOUT )
 		    || ( !empty(APC_CACHE_MAX_UPDATES) && $count > APC_CACHE_MAX_UPDATES )) {
+			// if server load is high, delay the write and set a backoff so we won't try again
+			// for a short while
 			if(apc_cache_load_too_high()) {
 				apc_cache_debug("System load too high. Won't try writing to database for $type", true);
 				apc_add(APC_CACHE_BACKOFF_KEY, time(), APC_CACHE_BACKOFF_TIME);
@@ -520,7 +530,7 @@ function apc_cache_write_needed($type) {
 		return false;
 	}
 	
-	// key went away. Better do an update to be safe
+	// The timer key went away. Better do an update to be safe
 	apc_cache_debug("No $type timer found");
 	return true;
 	
@@ -544,7 +554,7 @@ function apc_cache_api_filter($api_actions) {
  */
 function apc_cache_force_flush() {
 	$user = defined( 'YOURLS_USER' ) ? YOURLS_USER : '-1';
-        if(APC_CACHE_API_USER === false) {
+	if(APC_CACHE_API_USER === false) {
 		apc_cache_debug("Attempt to use API flushcache function whilst it is disabled. User: $user", true);
 		$return = array(
 			'simple'    => 'Error: The flushcache function is disabled',
@@ -552,14 +562,14 @@ function apc_cache_force_flush() {
 			'errorCode' => 403,
 		);
 	} 
-        elseif(!empty(APC_CACHE_API_USER) && APC_CACHE_API_USER != $user) {
+	elseif(!empty(APC_CACHE_API_USER) && APC_CACHE_API_USER != $user) {
 		apc_cache_debug("Unauthorised attempt to use API flushcache function by $user", true);
 		$return = array(
 			'simple'    => 'Error: User not authorised to use the flushcache function',
 			'message'   => 'Error: User not authorised to use the flushcache function',
 			'errorCode' => 403,
-		);        
-        } else {
+		); 
+	} else {
 		apc_cache_debug("Forcing write to database from API call");
 		$log_updates = apc_cache_write_log();
 		$click_updates = apc_cache_write_clicks();
