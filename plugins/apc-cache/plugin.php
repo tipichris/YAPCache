@@ -13,23 +13,27 @@ if( !function_exists( 'apc_exists' ) ) {
    yourls_die( 'This plugin requires the APC extension: http://pecl.php.net/package/APC' );
 }
 
+// keys for APC storage
+define('APC_CACHE_ID', 'ycache-');
+define('APC_CACHE_LOG_INDEX', APC_CACHE_ID . 'log_index');
+define('APC_CACHE_LOG_TIMER', APC_CACHE_ID . 'log_timer');
+define('APC_CACHE_LOG_UPDATE_LOCK', APC_CACHE_ID . 'log_update_lock');
+define('APC_CACHE_CLICK_INDEX', APC_CACHE_ID . 'click_index');
+define('APC_CACHE_CLICK_TIMER', APC_CACHE_ID . 'click_timer');
+define('APC_CACHE_CLICK_KEY_PREFIX', APC_CACHE_ID . 'clicks-');
+define('APC_CACHE_CLICK_UPDATE_LOCK', APC_CACHE_ID . 'click_update_lock');
+define('APC_CACHE_KEYWORD_PREFIX', APC_CACHE_ID . 'keyword-');
+define('APC_CACHE_ALL_OPTIONS', APC_CACHE_ID . 'get_all_options');
+define('APC_CACHE_YOURLS_INSTALLED', APC_CACHE_ID . 'yourls_installed');
+define('APC_CACHE_BACKOFF_KEY', APC_CACHE_ID . 'backoff');
+
+// configurable options
 if(!defined('APC_WRITE_CACHE_TIMEOUT')) {
 	define('APC_WRITE_CACHE_TIMEOUT', 120);
 }
 if(!defined('APC_READ_CACHE_TIMEOUT')) {
 	define('APC_READ_CACHE_TIMEOUT', 360);
 }
-define('APC_CACHE_LOG_INDEX', 'cachelogindex');
-define('APC_CACHE_LOG_TIMER', 'cachelogtimer');
-define('APC_CACHE_LOG_UPDATE_LOCK', 'cachelogupdatelock');
-define('APC_CACHE_CLICK_INDEX', 'cacheclickindex');
-define('APC_CACHE_CLICK_TIMER', 'cacheclicktimer');
-define('APC_CACHE_CLICK_KEY_PREFIX', 'cacheclicks-');
-define('APC_CACHE_CLICK_UPDATE_LOCK', 'cacheclickupdatelock');
-define('APC_CACHE_KEYWORD_PREFIX', 'cache-keyword-');
-define('APC_CACHE_ALL_OPTIONS', 'cache-get_all_options');
-define('APC_CACHE_YOURLS_INSTALLED', 'cache-yourls_installed');
-define('APC_CACHE_BACKOFF_KEY', 'cachebackoff');
 if(!defined('APC_CACHE_LONG_TIMEOUT')) {
 	define('APC_CACHE_LONG_TIMEOUT', 86400);
 }
@@ -48,6 +52,7 @@ if(!defined('APC_WRITE_CACHE_HARD_TIMEOUT')) {
 if(!defined('APC_CACHE_API_USER')) {
 	define('APC_CACHE_API_USER', '');
 }
+
 yourls_add_action( 'pre_get_keyword', 'apc_cache_pre_get_keyword' );
 yourls_add_filter( 'get_keyword_infos', 'apc_cache_get_keyword_infos' );
 if(!defined('APC_CACHE_SKIP_CLICKTRACK')) {
@@ -60,6 +65,7 @@ yourls_add_filter( 'activated_plugin', 'apc_cache_plugin_statechange' );
 yourls_add_filter( 'deactivated_plugin', 'apc_cache_plugin_statechange' );
 yourls_add_filter( 'edit_link', 'apc_cache_edit_link' );
 yourls_add_filter( 'api_actions', 'apc_cache_api_filter' );
+
 /**
  * Return cached options is available
  *
