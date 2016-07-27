@@ -65,8 +65,9 @@ if(!defined('APC_CACHE_SKIP_CLICKTRACK')) {
 }
 yourls_add_filter( 'shunt_all_options', 'apc_cache_shunt_all_options' );
 yourls_add_filter( 'get_all_options', 'apc_cache_get_all_options' );
-yourls_add_filter( 'activated_plugin', 'apc_cache_plugin_statechange' );
-yourls_add_filter( 'deactivated_plugin', 'apc_cache_plugin_statechange' );
+yourls_add_action( 'add_option', 'apc_cache_option_change' );
+yourls_add_action( 'delete_option', 'apc_cache_option_change' );
+yourls_add_action( 'update_option', 'apc_cache_option_change' );
 yourls_add_filter( 'edit_link', 'apc_cache_edit_link' );
 yourls_add_filter( 'api_actions', 'apc_cache_api_filter' );
 
@@ -103,11 +104,12 @@ function apc_cache_get_all_options($option) {
 }
 
 /**
- * Clear the options cache if a plugin is activated or deactivated
+ * Clear the options cache if an option is altered
+ * This covers changes to plugins too
  *
  * @param string $plugin 
  */
-function apc_cache_plugin_statechange($plugin) {
+function apc_cache_option_change($args) {
 	apc_delete(APC_CACHE_ALL_OPTIONS);
 }
 
