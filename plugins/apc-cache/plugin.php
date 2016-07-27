@@ -33,7 +33,7 @@ if(!defined('APC_CACHE_WRITE_TIMEOUT')) {
 	define('APC_CACHE_WRITE_TIMEOUT', 120);
 }
 if(!defined('APC_CACHE_READ_TIMEOUT')) {
-	define('APC_CACHE_READ_TIMEOUT', 360);
+	define('APC_CACHE_READ_TIMEOUT', 3600);
 }
 if(!defined('APC_CACHE_LONG_TIMEOUT')) {
 	define('APC_CACHE_LONG_TIMEOUT', 86400);
