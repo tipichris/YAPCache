@@ -406,10 +406,10 @@ function apc_cache_get_keyword_key($keyword) {
  * @return void
  */
 function apc_cache_key_increment($key) {
-	do {
-		$result = apc_inc($key);
-	} while(!$result && usleep(500));
-	return $result;
+	while(!apc_inc($key)) {
+		usleep(500);
+	} 
+	return true;
 }
 
 /**
