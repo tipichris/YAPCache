@@ -489,14 +489,15 @@ function apc_cache_write_needed($type) {
 	
 	if(apc_exists($timerkey)) {
 		$lastupdate = apc_fetch($timerkey);
-		apc_cache_debug("Last $type write at " . strftime("%T" , $lastupdate));
+		$elapsed = time() - $lastupdate;
+		apc_cache_debug("Last $type write $elapsed seconds ago at " . strftime("%T" , $lastupdate));
 		
 		/**
-		 * in the test below APC_WRITE_CACHE_TIMEOUT of 0 means never do a write on the basis of
-		 * time elapsed, APC_CACHE_MAX_UPDATES of 0 means never do a write on the basis of queued 
-		 * updates
+		 * in the tests below APC_WRITE_CACHE_TIMEOUT of 0 means never do a write on the basis of
+		 * time elapsed, APC_CACHE_MAX_UPDATES of 0 means never do a write on the basis of number 
+		 * of queued updates
 		 **/
-		if ( !empty(APC_WRITE_CACHE_TIMEOUT) && time() > $lastupdate + APC_WRITE_CACHE_HARD_TIMEOUT) {
+		if ( !empty(APC_WRITE_CACHE_TIMEOUT) && $elapsed > APC_WRITE_CACHE_HARD_TIMEOUT) {
 			apc_cache_debug("Reached hard timeout. Forcing write for $type");
 			return true;
 		}
@@ -506,7 +507,7 @@ function apc_cache_write_needed($type) {
 			return false;
 		}
 		
-		if(( !empty(APC_WRITE_CACHE_TIMEOUT) && time() > $lastupdate + APC_WRITE_CACHE_TIMEOUT )
+		if(( !empty(APC_WRITE_CACHE_TIMEOUT) && $elapsed > APC_WRITE_CACHE_TIMEOUT )
 		    || ( !empty(APC_CACHE_MAX_UPDATES) && $count > APC_CACHE_MAX_UPDATES )) {
 			if(apc_cache_load_too_high()) {
 				apc_cache_debug("System load too high. Won't try writing to database for $type", true);
