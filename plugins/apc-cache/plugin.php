@@ -26,6 +26,7 @@ define('APC_CACHE_KEYWORD_PREFIX', APC_CACHE_ID . 'keyword-');
 define('APC_CACHE_ALL_OPTIONS', APC_CACHE_ID . 'get_all_options');
 define('APC_CACHE_YOURLS_INSTALLED', APC_CACHE_ID . 'yourls_installed');
 define('APC_CACHE_BACKOFF_KEY', APC_CACHE_ID . 'backoff');
+define('APC_CACHE_CLICK_INDEX_LOCK', APC_CACHE_ID . 'click_index_lock');
 
 // configurable options
 if(!defined('APC_CACHE_WRITE_TIMEOUT')) {
@@ -194,6 +195,7 @@ function apc_cache_shunt_update_clicks($false, $keyword) {
 	 * stored at APC_CACHE_CLICK_INDEX, with keyword as the keyword
 	 */
 	$idxkey = APC_CACHE_CLICK_INDEX;
+	apc_cache_lock_click_index();
 	if(apc_exists($idxkey)) {
 		$clickindex = apc_fetch($idxkey);
 	} else {
@@ -201,6 +203,7 @@ function apc_cache_shunt_update_clicks($false, $keyword) {
 	}
 	$clickindex[$keyword] = 1;
 	apc_store ( $idxkey, $clickindex);
+	apc_cache_unlock_click_index();
 	
 	if(apc_cache_write_needed('click')) {
 		apc_cache_write_clicks();
@@ -222,12 +225,15 @@ function apc_cache_write_clicks() {
 	}
 	
 	if(apc_exists(APC_CACHE_CLICK_INDEX)) {
+		apc_cache_lock_click_index();
 		$clickindex = apc_fetch(APC_CACHE_CLICK_INDEX);
 		if(!apc_delete(APC_CACHE_CLICK_INDEX)) {
 			// if apc_delete fails it's because the key went away. We probably have a race condition
+			apc_cache_unlock_click_index();
 			apc_cache_debug("Index key disappeared. Abandoning write", true);
 			return $updates; 
 		}
+		apc_cache_unlock_click_index();
 
 		/* as long as the tables support transactions, it's much faster to wrap all the updates
 		* up into a single transaction. Reduces the overhead of starting a transaction for each
@@ -422,6 +428,30 @@ function apc_cache_key_zero($key) {
 		$result = apc_cas($key, $old, 0);
 	} while(!$result && usleep(500));
 	return $old;
+}
+
+/**
+ * Helper function to manage a voluntary lock on APC_CACHE_CLICK_INDEX
+ * 
+ * @return true when locked
+ */
+function apc_cache_lock_click_index() {
+	$n = 1;
+	while(!apc_add(APC_CACHE_CLICK_INDEX_LOCK, 1, 1)) {
+		$n++;
+		usleep(500);
+	} 
+	if($n > 1) apc_cache_debug("Locked click index in $n tries");
+	return true;
+}
+
+/**
+ * Helper function to unlock a voluntary lock on APC_CACHE_CLICK_INDEX
+ * 
+ * @return void
+ */
+function apc_cache_unlock_click_index() {
+	apc_delete(APC_CACHE_CLICK_INDEX_LOCK);
 }
 
 /**
