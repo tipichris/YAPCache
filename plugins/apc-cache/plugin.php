@@ -36,8 +36,8 @@ if(!defined('APC_CACHE_LONG_TIMEOUT')) {
 if(!defined('APC_CACHE_MAX_LOAD')) {
 	define('APC_CACHE_MAX_LOAD', 0.7);
 }
-if(!defined('APC_CACHE_MAX_CLICK_UPDATES')) {
-	define('APC_CACHE_MAX_CLICK_UPDATES', 200);
+if(!defined('APC_CACHE_MAX_UPDATES')) {
+	define('APC_CACHE_MAX_UPDATES', 200);
 }
 if(!defined('APC_CACHE_BACKOFF_TIME')) {
 	define('APC_CACHE_BACKOFF_TIME', 30);
@@ -188,8 +188,7 @@ function apc_cache_shunt_update_clicks($false, $keyword) {
 	$clickindex[$keyword] = 1;
 	apc_store ( $idxkey, $clickindex);
 	
-	if(apc_cache_write_needed('click') 
-		|| apc_cache_click_updates_count_too_high()) {
+	if(apc_cache_write_needed('click')) {
 		apc_cache_write_clicks();
 	}
 	
@@ -412,6 +411,10 @@ function apc_cache_key_zero($key) {
 
 /**
  * Send debug messages to PHP's error log
+ *
+ * @param string $msg
+ * @param bool $important
+ * @return void
  */
 function apc_cache_debug ($msg, $important=false) {
 	if ($important || (defined('APC_CACHE_DEBUG') && APC_CACHE_DEBUG)) { 
@@ -421,6 +424,8 @@ function apc_cache_debug ($msg, $important=false) {
 
 /**
  * Check if the server load is above our maximum threshold for doing DB writes
+ * 
+ * @return bool true if load exceeds threshold, false otherwise
  */
 function apc_cache_load_too_high() {
 	if(APC_CACHE_MAX_LOAD == 0)
@@ -436,62 +441,62 @@ function apc_cache_load_too_high() {
 }
 
 /**
- * Check number of click updates that are cached
+ * Count number of click updates that are cached
+ * 
+ * @return int number of keywords with cached clicks
  */
-function apc_cache_click_updates_count_too_high() {
-	if(APC_CACHE_MAX_CLICK_UPDATES == 0)
-		//APC_CACHE_MAX_CLICK_UPDATES of 0 means don't check 
-		return false;
+function apc_cache_click_updates_count() {
+	$count = 0;
 	if(apc_exists(APC_CACHE_CLICK_INDEX)) {
 		$clickindex = apc_fetch(APC_CACHE_CLICK_INDEX);
 		$count = count($clickindex);
-		apc_cache_debug("$count click updates in cache");
-		if($count > APC_CACHE_MAX_CLICK_UPDATES) {
-			if(apc_cache_load_too_high()) {
-				apc_cache_debug("System load too high. Won't try writing clicks to database", true);
-				apc_add(APC_CACHE_BACKOFF_KEY, time(), APC_CACHE_BACKOFF_TIME);
-				return false;
-			}
-			return true;
-		}
 	}
-	return false;
+	return $count;
 }
+
 
 /**
  * Check if we need to do a write to DB yet
  * Considers time since last write, system load etc
+ *
+ * @param string $type either 'click' or 'log' 
+ * @return bool true if a DB write is due, false otherwise
  */
-
 function apc_cache_write_needed($type) {
-	// APC_WRITE_CACHE_TIMEOUT of 0 means never update without
-	// an API call
-	if(APC_WRITE_CACHE_TIMEOUT == 0)
-		return false;
 		
 	if($type == 'click') {
 		$timerkey = APC_CACHE_CLICK_TIMER;
+		$count = apc_cache_click_updates_count();
 	} elseif ($type = 'log') {
 		$timerkey = APC_CACHE_LOG_TIMER;
+		$count = apc_fetch(APC_CACHE_LOG_INDEX);
 	} else {
 		return false;
 	}
-
+	if (empty($count)) $count = 0;
+	apc_cache_debug("$count $type updates in cache");
+	
 	if(apc_exists($timerkey)) {
 		$lastupdate = apc_fetch($timerkey);
 		apc_cache_debug("Last $type write at " . strftime("%T" , $lastupdate));
 		
-		if (time() > $lastupdate + APC_WRITE_CACHE_HARD_TIMEOUT) {
+		/**
+		 * in the test below APC_WRITE_CACHE_TIMEOUT of 0 means never do a write on the basis of
+		 * time elapsed, APC_CACHE_MAX_UPDATES of 0 means never do a write on the basis of queued 
+		 * updates
+		 **/
+		if ( !empty(APC_WRITE_CACHE_TIMEOUT) && time() > $lastupdate + APC_WRITE_CACHE_HARD_TIMEOUT) {
 			apc_cache_debug("Reached hard timeout. Forcing write for $type");
 			return true;
 		}
 		
-		if(apc_exists(APC_CACHE_BACKOFF_KEY)) {
+		if( apc_exists(APC_CACHE_BACKOFF_KEY)) {
 			apc_cache_debug("Won't do write for $type during backoff period");
 			return false;
 		}
 		
-		if(time() > $lastupdate + APC_WRITE_CACHE_TIMEOUT) {
+		if(( !empty(APC_WRITE_CACHE_TIMEOUT) && time() > $lastupdate + APC_WRITE_CACHE_TIMEOUT )
+		    || ( !empty(APC_CACHE_MAX_UPDATES) && $count > APC_CACHE_MAX_UPDATES )) {
 			if(apc_cache_load_too_high()) {
 				apc_cache_debug("System load too high. Won't try writing to database for $type", true);
 				apc_add(APC_CACHE_BACKOFF_KEY, time(), APC_CACHE_BACKOFF_TIME);
@@ -499,6 +504,7 @@ function apc_cache_write_needed($type) {
 			}
 			return true;
 		}
+
 		return false;
 	}
 	
@@ -508,11 +514,22 @@ function apc_cache_write_needed($type) {
 	
 }
 
+/**
+ * Add the flushcache method to the API
+ *
+ * @param array $api_action 
+ * @return array $api_action
+ */
 function apc_cache_api_filter($api_actions) {
 	$api_actions['flushcache'] = 'apc_cache_force_flush';
 	return $api_actions;
 }
 
+/**
+ * Force a write of both clicks and logs to the database
+ *
+ * @return array $return status of updates
+ */
 function apc_cache_force_flush() {
 	apc_cache_debug("Forcing write to database from API call");
 	$log_updates = apc_cache_write_log();
