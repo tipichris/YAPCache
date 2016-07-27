@@ -45,6 +45,9 @@ if(!defined('APC_CACHE_BACKOFF_TIME')) {
 if(!defined('APC_WRITE_CACHE_HARD_TIMEOUT')) {
 	define('APC_WRITE_CACHE_HARD_TIMEOUT', 600);
 }
+if(!defined('APC_CACHE_API_USER')) {
+	define('APC_CACHE_API_USER', '');
+}
 yourls_add_action( 'pre_get_keyword', 'apc_cache_pre_get_keyword' );
 yourls_add_filter( 'get_keyword_infos', 'apc_cache_get_keyword_infos' );
 if(!defined('APC_CACHE_SKIP_CLICKTRACK')) {
@@ -242,6 +245,7 @@ function apc_cache_write_clicks() {
 	$ydb->query("COMMIT");
 	apc_store(APC_CACHE_CLICK_TIMER, time());
 	apc_delete(APC_CACHE_CLICK_UPDATE_LOCK);
+	apc_cache_debug("Updated click records for $updates URLs");
 	return $updates;
 }
 
@@ -353,6 +357,7 @@ function apc_cache_write_log() {
 				VALUES " . $query);
 	apc_store(APC_CACHE_LOG_TIMER, time());
 	apc_delete(APC_CACHE_LOG_UPDATE_LOCK);
+	apc_cache_debug("Added $updates entries to log");
 	return $updates;
 
 }
@@ -531,15 +536,33 @@ function apc_cache_api_filter($api_actions) {
  * @return array $return status of updates
  */
 function apc_cache_force_flush() {
-	apc_cache_debug("Forcing write to database from API call");
-	$log_updates = apc_cache_write_log();
-	$click_updates = apc_cache_write_clicks();
-	$return = array(
-		'clicksUpdated'   => $click_updates,
-		'logsUpdated' => $log_updates,
-		'statusCode' => 200,
-		'simple'     => "Updated clicks for $click_updates URLs. Logged $log_updates hits.",
-		'message'    => 'success',
-	);
+	$user = defined( 'YOURLS_USER' ) ? YOURLS_USER : '-1';
+        if(APC_CACHE_API_USER === false) {
+		apc_cache_debug("Attempt to use API flushcache function whilst it is disabled. User: $user", true);
+		$return = array(
+			'simple'    => 'Error: The flushcache function is disabled',
+			'message'   => 'Error: The flushcache function is disabled',
+			'errorCode' => 403,
+		);
+	} 
+        elseif(!empty(APC_CACHE_API_USER) && APC_CACHE_API_USER != $user) {
+		apc_cache_debug("Unauthorised attempt to use API flushcache function by $user", true);
+		$return = array(
+			'simple'    => 'Error: User not authorised to use the flushcache function',
+			'message'   => 'Error: User not authorised to use the flushcache function',
+			'errorCode' => 403,
+		);        
+        } else {
+		apc_cache_debug("Forcing write to database from API call");
+		$log_updates = apc_cache_write_log();
+		$click_updates = apc_cache_write_clicks();
+		$return = array(
+			'clicksUpdated'   => $click_updates,
+			'logsUpdated' => $log_updates,
+			'statusCode' => 200,
+			'simple'     => "Updated clicks for $click_updates URLs. Logged $log_updates hits.",
+			'message'    => 'Success',
+		);
+	}
 	return $return;
 }
