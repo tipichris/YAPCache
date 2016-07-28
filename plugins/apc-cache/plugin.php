@@ -421,18 +421,22 @@ function apc_cache_key_increment($key) {
  * @return old value before the reset
  */
 function apc_cache_key_zero($key) {
-	/* TODO rework this in a while loop to avoid always having
-	 * a 0.5ms delay. When resetting 1000 click URLs at once this
-	 * mounts up
-	 */
 	$old = 0;
-	do {
+	$n = 1;
+	$old = apc_fetch($key);
+	if($old == 0) {
+		return $old;
+	}
+	while(!apc_cas($key, $old, 0)) {
+		usleep(500);
+		$n++;
 		$old = apc_fetch($key);
 		if($old == 0) {
+			apc_cache_debug("key_zero: Key zeroed by someone else. Try $n");
 			return $old;
 		}
-		$result = apc_cas($key, $old, 0);
-	} while(!$result && usleep(500));
+	}
+	if($n > 1) apc_cache_debug("key_zero: Key zeroed from $old after $n tries");
 	return $old;
 }
 
