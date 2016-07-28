@@ -421,6 +421,10 @@ function apc_cache_key_increment($key) {
  * @return old value before the reset
  */
 function apc_cache_key_zero($key) {
+	/* TODO rework this in a while loop to avoid always having
+	 * a 0.5ms delay. When resetting 1000 click URLs at once this
+	 * mounts up
+	 */
 	$old = 0;
 	do {
 		$old = apc_fetch($key);
@@ -439,6 +443,7 @@ function apc_cache_key_zero($key) {
  */
 function apc_cache_lock_click_index() {
 	$n = 1;
+	// we always unlock as soon as possilbe, so a TTL of 1 should be fine
 	while(!apc_add(APC_CACHE_CLICK_INDEX_LOCK, 1, 1)) {
 		$n++;
 		usleep(500);
@@ -585,6 +590,11 @@ function apc_cache_api_filter($api_actions) {
  * @return array $return status of updates
  */
 function apc_cache_force_flush() {
+	/* APC_CACHE_API_USER of false means disable API. 
+	 * APC_CACHE_API_USER of empty string means allow
+	 * any user to use API. Otherwise only the specified 
+	 * user is allowed
+	 */
 	$user = defined( 'YOURLS_USER' ) ? YOURLS_USER : '-1';
 	if(APC_CACHE_API_USER === false) {
 		apc_cache_debug("Attempt to use API flushcache function whilst it is disabled. User: $user", true);
