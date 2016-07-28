@@ -408,9 +408,12 @@ function apc_cache_get_keyword_key($keyword) {
  * @return void
  */
 function apc_cache_key_increment($key) {
+	$n = 1;
 	while(!apc_inc($key)) {
 		usleep(500);
-	} 
+		$n++;
+	}
+	if($n > 1) apc_cache_debug("key_increment: took $n tries");
 	return true;
 }
 
@@ -452,7 +455,7 @@ function apc_cache_lock_click_index() {
 		$n++;
 		usleep(500);
 	} 
-	if($n > 1) apc_cache_debug("Locked click index in $n tries");
+	if($n > 1) apc_cache_debug("lock_click_index: Locked click index in $n tries");
 	return true;
 }
 
