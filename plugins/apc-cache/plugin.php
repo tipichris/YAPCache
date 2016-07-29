@@ -63,6 +63,11 @@ if(!defined('APC_CACHE_SKIP_CLICKTRACK')) {
 	yourls_add_filter( 'shunt_update_clicks', 'apc_cache_shunt_update_clicks' );
 	yourls_add_filter( 'shunt_log_redirect', 'apc_cache_shunt_log_redirect' );
 }
+if(defined('APC_CACHE_REDIRECT_FIRST') && APC_CACHE_REDIRECT_FIRST) {
+	// set a very low priority to ensure any other plugins hooking here run first,
+	// as we die at the end of apc_cache_redirect_shorturl
+	yourls_add_action( 'redirect_shorturl', 'apc_cache_redirect_shorturl', 999);
+}
 yourls_add_filter( 'shunt_all_options', 'apc_cache_shunt_all_options' );
 yourls_add_filter( 'get_all_options', 'apc_cache_get_all_options' );
 yourls_add_action( 'add_option', 'apc_cache_option_change' );
@@ -223,7 +228,8 @@ function apc_cache_write_clicks() {
 	$updates = 0;
 	// set up a lock so that another hit doesn't start writing too
 	if(!apc_add(APC_CACHE_CLICK_UPDATE_LOCK, 1, APC_CACHE_LOCK_TIMEOUT)) {
-		apc_cache_debug("Could not lock the click index. Abandoning write", true);
+		apc_cache_debug("write_clicks: Could not lock the click index. Abandoning write", true);
+		return $updates;
 	}
 	
 	if(apc_exists(APC_CACHE_CLICK_INDEX)) {
@@ -232,7 +238,7 @@ function apc_cache_write_clicks() {
 		if(!apc_delete(APC_CACHE_CLICK_INDEX)) {
 			// if apc_delete fails it's because the key went away. We probably have a race condition
 			apc_cache_unlock_click_index();
-			apc_cache_debug("Index key disappeared. Abandoning write", true);
+			apc_cache_debug("write_clicks: Index key disappeared. Abandoning write", true);
 			return $updates; 
 		}
 		apc_cache_unlock_click_index();
@@ -256,12 +262,12 @@ function apc_cache_write_clicks() {
 						" WHERE `keyword` = '" . $keyword . "'");
 			$updates++;
 		}
-		apc_cache_debug("Committing changes");
+		apc_cache_debug("write_clicks: Committing changes");
 		$ydb->query("COMMIT");
 		apc_store(APC_CACHE_CLICK_TIMER, time());
 	}
 	apc_delete(APC_CACHE_CLICK_UPDATE_LOCK);
-	apc_cache_debug("Updated click records for $updates URLs");
+	apc_cache_debug("write_clicks: Updated click records for $updates URLs");
 	return $updates;
 }
 
@@ -273,17 +279,21 @@ function apc_cache_write_clicks() {
  */
 function apc_cache_shunt_log_redirect($false, $keyword) {
 
-	// Initialise the time.
-	if(!apc_exists(APC_CACHE_LOG_TIMER)) {
-		apc_add(APC_CACHE_LOG_TIMER, time());
-	}
-	
 	if(defined('APC_CACHE_STATS_SHUNT')) {
 		if(APC_CACHE_STATS_SHUNT == "drop") {
 			return true;
 		} else if(APC_CACHE_STATS_SHUNT == "none"){
 			return false;
 		}
+	}
+	// respect setting in YOURLS_NOSTATS. Why you'd want to enable the plugin and 
+	// set YOURLS_NOSTATS true I don't know ;)
+	if ( !yourls_do_log_redirect() )
+		return true;
+
+	// Initialise the time.
+	if(!apc_exists(APC_CACHE_LOG_TIMER)) {
+		apc_add(APC_CACHE_LOG_TIMER, time());
 	}
 	
 	$args = array(
@@ -328,13 +338,15 @@ function apc_cache_write_log() {
 	$updates = 0;
 	// set up a lock so that another hit doesn't start writing too
 	if(!apc_add(APC_CACHE_LOG_UPDATE_LOCK, 1, APC_CACHE_LOCK_TIMEOUT)) {
-		apc_cache_debug("Could not lock the log index. Abandoning write", true);
+		apc_cache_debug("write_log: Could not lock the log index. Abandoning write", true);
+		return $updates;
 	}
-	apc_cache_debug("Writing log to database");
+	apc_cache_debug("write_log: Writing log to database");
 
 	$key = APC_CACHE_LOG_INDEX;
 	$index = apc_fetch($key);
 	$fetched = 0;
+	$n = 0;
 	$loop = true;
 	$values = array();
 	
@@ -345,14 +357,16 @@ function apc_cache_write_log() {
 		}
 		
 		$fetched = $index;
+		$n++;
 		
 		if(apc_cas($key, $index, 0)) {
 			$loop = false;
 		} else {
 			usleep(500);
+			$index = apc_fetch($key);
 		}
 	}
-
+	apc_cache_debug("write_log: $fetched log entries retrieved; index reset after $n tries");
 	// Insert all log message - we're assuming input filtering happened earlier
 	$query = "";
 
@@ -375,7 +389,7 @@ function apc_cache_write_log() {
 				VALUES " . $query);
 	apc_store(APC_CACHE_LOG_TIMER, time());
 	apc_delete(APC_CACHE_LOG_UPDATE_LOCK);
-	apc_cache_debug("Added $updates entries to log");
+	apc_cache_debug("write_log: Added $updates entries to log");
 	return $updates;
 
 }
@@ -548,7 +562,7 @@ function apc_cache_write_needed($type) {
 		 
 		// if we reached APC_CACHE_WRITE_HARD_TIMEOUT force a write out no matter what
 		if ( !empty(APC_CACHE_WRITE_TIMEOUT) && $elapsed > APC_CACHE_WRITE_HARD_TIMEOUT) {
-			apc_cache_debug("Reached hard timeout. Forcing write for $type");
+			apc_cache_debug("write_needed: Reached hard timeout (" . APC_CACHE_WRITE_HARD_TIMEOUT ."). Forcing write for $type after $elapsed seconds");
 			return true;
 		}
 		
@@ -568,6 +582,7 @@ function apc_cache_write_needed($type) {
 				apc_add(APC_CACHE_BACKOFF_KEY, time(), APC_CACHE_BACKOFF_TIME);
 				return false;
 			}
+			apc_cache_debug("write_needed: type: $type; count: $count; elapsed: $elapsed; APC_CACHE_WRITE_TIMEOUT: " . APC_CACHE_WRITE_TIMEOUT . "; APC_CACHE_MAX_UPDATES: " . APC_CACHE_MAX_UPDATES );
 			return true;
 		}
 
@@ -575,7 +590,7 @@ function apc_cache_write_needed($type) {
 	}
 	
 	// The timer key went away. Better do an update to be safe
-	apc_cache_debug("No $type timer found");
+	apc_cache_debug("write_needed: reason: no $type timer found");
 	return true;
 	
 }
@@ -604,7 +619,7 @@ function apc_cache_force_flush() {
 	 */
 	$user = defined( 'YOURLS_USER' ) ? YOURLS_USER : '-1';
 	if(APC_CACHE_API_USER === false) {
-		apc_cache_debug("Attempt to use API flushcache function whilst it is disabled. User: $user", true);
+		apc_cache_debug("force_flush: Attempt to use API flushcache function whilst it is disabled. User: $user", true);
 		$return = array(
 			'simple'    => 'Error: The flushcache function is disabled',
 			'message'   => 'Error: The flushcache function is disabled',
@@ -612,23 +627,61 @@ function apc_cache_force_flush() {
 		);
 	} 
 	elseif(!empty(APC_CACHE_API_USER) && APC_CACHE_API_USER != $user) {
-		apc_cache_debug("Unauthorised attempt to use API flushcache function by $user", true);
+		apc_cache_debug("force_flush: Unauthorised attempt to use API flushcache function by $user", true);
 		$return = array(
 			'simple'    => 'Error: User not authorised to use the flushcache function',
 			'message'   => 'Error: User not authorised to use the flushcache function',
 			'errorCode' => 403,
 		); 
 	} else {
-		apc_cache_debug("Forcing write to database from API call");
+		apc_cache_debug("force_flush: Forcing write to database from API call");
+		$start = microtime(true);
 		$log_updates = apc_cache_write_log();
+		$log_time = sprintf("%01.3f", 1000*(microtime(true) - $start));
 		$click_updates = apc_cache_write_clicks();
+		$click_time = sprintf("%01.3f", 1000*(microtime(true) - $start));
 		$return = array(
 			'clicksUpdated'   => $click_updates,
+			'clickUpdateTime' => $click_time,
 			'logsUpdated' => $log_updates,
+			'logUpdateTime' => $log_time,
 			'statusCode' => 200,
-			'simple'     => "Updated clicks for $click_updates URLs. Logged $log_updates hits.",
+			'simple'     => "Updated clicks for $click_updates URLs in ${click_time} ms. Logged $log_updates hits in ${log_time} ms.",
 			'message'    => 'Success',
 		);
 	}
 	return $return;
+}
+
+/**
+ * Replaces yourls_redirect. Does redirect first, then does logging and click
+ * recording afterwards so that redirect is not delayed
+ * This is somewhat fragile and may be broken by other plugins that hook on 
+ * pre_redirect, redirect_location or redirect_code
+ *
+ */
+function apc_cache_redirect_shorturl( $args ) {
+	$code = defined('APC_CACHE_REDIRECT_FIRST_CODE')?APC_CACHE_REDIRECT_FIRST_CODE:301;
+	$location = $args[0];
+	$keyword = $args[1];
+	yourls_do_action( 'pre_redirect', $location, $code );
+	$location = yourls_apply_filter( 'redirect_location', $location, $code );
+	$code     = yourls_apply_filter( 'redirect_code', $code, $location );
+	// Redirect, either properly if possible, or via Javascript otherwise
+	if( !headers_sent() ) {
+		yourls_status_header( $code );
+		header( "Location: $location" );
+	} else {
+		yourls_redirect_javascript( $location );
+	}
+	$start = microtime(true);
+	// Update click count in main table
+	$update_clicks = yourls_update_clicks( $keyword );
+
+	// Update detailed log for stats
+	$log_redirect = yourls_log_redirect( $keyword );
+	$lapsed = sprintf("%01.3f", 1000*(microtime(true) - $start));
+	apc_cache_debug("Database updates took $lapsed ms after sending redirect");
+	
+	die();
 }
