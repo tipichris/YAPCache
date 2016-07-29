@@ -374,16 +374,17 @@ function apc_cache_write_log() {
 		if(strlen($query)) {
 			$query .= ",";
 		}
-		$query .= "('" . 
+		$row = "('" . 
 			$value[0] . "', '" . 
 			$value[1] . "', '" . 
 			$value[2] . "', '" . 
 			$value[3] . "', '" . 
 			$value[4] . "', '" . 
 			$value[5] . "')";
+		apc_cache_debug("write_log: row: $row");
+		$query .= $row;
 		$updates++;
 	}
-	// apc_cache_debug("Q: $query");
 	$ydb->query( "INSERT INTO `" . YOURLS_DB_TABLE_LOG . "` 
 				(click_time, shorturl, referrer, user_agent, ip_address, country_code)
 				VALUES " . $query);
@@ -423,12 +424,12 @@ function apc_cache_get_keyword_key($keyword) {
  */
 function apc_cache_key_increment($key) {
 	$n = 1;
-	while(!apc_inc($key)) {
+	while(!$result = apc_inc($key)) {
 		usleep(500);
 		$n++;
 	}
 	if($n > 1) apc_cache_debug("key_increment: took $n tries");
-	return true;
+	return $result;
 }
 
 /**
