@@ -547,12 +547,12 @@ function apc_cache_write_needed($type) {
 		return false;
 	}
 	if (empty($count)) $count = 0;
-	apc_cache_debug("write_needed: $count $type updates in cache");
+	apc_cache_debug("write_needed: Info: $count $type updates in cache");
 	
 	if(apc_exists($timerkey)) {
 		$lastupdate = apc_fetch($timerkey);
 		$elapsed = time() - $lastupdate;
-		apc_cache_debug("write_needed: Last $type write $elapsed seconds ago at " . strftime("%T" , $lastupdate));
+		apc_cache_debug("write_needed: Info: Last $type write $elapsed seconds ago at " . strftime("%T" , $lastupdate));
 		
 		/**
 		 * in the tests below APC_CACHE_WRITE_TIMEOUT of 0 means never do a write on the basis of
@@ -568,7 +568,7 @@ function apc_cache_write_needed($type) {
 		
 		// if we've backed off because of server load, don't write
 		if( apc_exists(APC_CACHE_BACKOFF_KEY)) {
-			apc_cache_debug("write_needed: Won't do write for $type during backoff period");
+			apc_cache_debug("write_needed: False: Won't do write for $type during backoff period");
 			return false;
 		}
 		
@@ -578,7 +578,7 @@ function apc_cache_write_needed($type) {
 			// if server load is high, delay the write and set a backoff so we won't try again
 			// for a short while
 			if(apc_cache_load_too_high()) {
-				apc_cache_debug("write_needed: System load too high. Won't try writing to database for $type", true);
+				apc_cache_debug("write_needed: False: System load too high. Won't try writing to database for $type", true);
 				apc_add(APC_CACHE_BACKOFF_KEY, time(), APC_CACHE_BACKOFF_TIME);
 				return false;
 			}
@@ -671,9 +671,15 @@ function apc_cache_redirect_shorturl( $args ) {
 	if( !headers_sent() ) {
 		yourls_status_header( $code );
 		header( "Location: $location" );
+		// force the headers to be sent
+		echo "Redirecting\n";
+		ob_end_flush();
+		ob_flush();
+		flush();
 	} else {
 		yourls_redirect_javascript( $location );
 	}
+
 	$start = microtime(true);
 	// Update click count in main table
 	$update_clicks = yourls_update_clicks( $keyword );
