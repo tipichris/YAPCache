@@ -672,7 +672,7 @@ function apc_cache_redirect_shorturl( $args ) {
 		yourls_status_header( $code );
 		header( "Location: $location" );
 		// force the headers to be sent
-		echo "Redirecting\n";
+		echo "Redirecting to $location\n";
 		ob_end_flush();
 		ob_flush();
 		flush();
