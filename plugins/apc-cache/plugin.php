@@ -224,7 +224,7 @@ function apc_cache_shunt_update_clicks($false, $keyword) {
  */
 function apc_cache_write_clicks() {
 	global $ydb;
-	apc_cache_debug("Writing clicks to database");
+	apc_cache_debug("write_clicks: Writing clicks to database");
 	$updates = 0;
 	// set up a lock so that another hit doesn't start writing too
 	if(!apc_add(APC_CACHE_CLICK_UPDATE_LOCK, 1, APC_CACHE_LOCK_TIMEOUT)) {
@@ -254,7 +254,7 @@ function apc_cache_write_clicks() {
 			if(apc_exists($key)) {
 				$value += apc_cache_key_zero($key);
 			}
-			apc_cache_debug("Adding $value clicks for $keyword");
+			apc_cache_debug("write_clicks: Adding $value clicks for $keyword");
 			// Write value to DB
 			$ydb->query("UPDATE `" . 
 							YOURLS_DB_TABLE_URL. 
@@ -547,12 +547,12 @@ function apc_cache_write_needed($type) {
 		return false;
 	}
 	if (empty($count)) $count = 0;
-	apc_cache_debug("$count $type updates in cache");
+	apc_cache_debug("write_needed: $count $type updates in cache");
 	
 	if(apc_exists($timerkey)) {
 		$lastupdate = apc_fetch($timerkey);
 		$elapsed = time() - $lastupdate;
-		apc_cache_debug("Last $type write $elapsed seconds ago at " . strftime("%T" , $lastupdate));
+		apc_cache_debug("write_needed: Last $type write $elapsed seconds ago at " . strftime("%T" , $lastupdate));
 		
 		/**
 		 * in the tests below APC_CACHE_WRITE_TIMEOUT of 0 means never do a write on the basis of
@@ -562,13 +562,13 @@ function apc_cache_write_needed($type) {
 		 
 		// if we reached APC_CACHE_WRITE_HARD_TIMEOUT force a write out no matter what
 		if ( !empty(APC_CACHE_WRITE_TIMEOUT) && $elapsed > APC_CACHE_WRITE_HARD_TIMEOUT) {
-			apc_cache_debug("write_needed: Reached hard timeout (" . APC_CACHE_WRITE_HARD_TIMEOUT ."). Forcing write for $type after $elapsed seconds");
+			apc_cache_debug("write_needed: True: Reached hard timeout (" . APC_CACHE_WRITE_HARD_TIMEOUT ."). Forcing write for $type after $elapsed seconds");
 			return true;
 		}
 		
 		// if we've backed off because of server load, don't write
 		if( apc_exists(APC_CACHE_BACKOFF_KEY)) {
-			apc_cache_debug("Won't do write for $type during backoff period");
+			apc_cache_debug("write_needed: Won't do write for $type during backoff period");
 			return false;
 		}
 		
@@ -578,11 +578,11 @@ function apc_cache_write_needed($type) {
 			// if server load is high, delay the write and set a backoff so we won't try again
 			// for a short while
 			if(apc_cache_load_too_high()) {
-				apc_cache_debug("System load too high. Won't try writing to database for $type", true);
+				apc_cache_debug("write_needed: System load too high. Won't try writing to database for $type", true);
 				apc_add(APC_CACHE_BACKOFF_KEY, time(), APC_CACHE_BACKOFF_TIME);
 				return false;
 			}
-			apc_cache_debug("write_needed: type: $type; count: $count; elapsed: $elapsed; APC_CACHE_WRITE_TIMEOUT: " . APC_CACHE_WRITE_TIMEOUT . "; APC_CACHE_MAX_UPDATES: " . APC_CACHE_MAX_UPDATES );
+			apc_cache_debug("write_needed: True: type: $type; count: $count; elapsed: $elapsed; APC_CACHE_WRITE_TIMEOUT: " . APC_CACHE_WRITE_TIMEOUT . "; APC_CACHE_MAX_UPDATES: " . APC_CACHE_MAX_UPDATES );
 			return true;
 		}
 
@@ -590,7 +590,7 @@ function apc_cache_write_needed($type) {
 	}
 	
 	// The timer key went away. Better do an update to be safe
-	apc_cache_debug("write_needed: reason: no $type timer found");
+	apc_cache_debug("write_needed: True: reason: no $type timer found");
 	return true;
 	
 }
@@ -681,7 +681,7 @@ function apc_cache_redirect_shorturl( $args ) {
 	// Update detailed log for stats
 	$log_redirect = yourls_log_redirect( $keyword );
 	$lapsed = sprintf("%01.3f", 1000*(microtime(true) - $start));
-	apc_cache_debug("Database updates took $lapsed ms after sending redirect");
+	apc_cache_debug("redirect_shorturl: Database updates took $lapsed ms after sending redirect");
 	
 	die();
 }
