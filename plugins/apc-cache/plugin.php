@@ -235,7 +235,7 @@ function apc_cache_write_clicks() {
 	if(apc_exists(APC_CACHE_CLICK_INDEX)) {
 		apc_cache_lock_click_index();
 		$clickindex = apc_fetch(APC_CACHE_CLICK_INDEX);
-		if(!apc_delete(APC_CACHE_CLICK_INDEX)) {
+		if($clickindex === false || !apc_delete(APC_CACHE_CLICK_INDEX)) {
 			// if apc_delete fails it's because the key went away. We probably have a race condition
 			apc_cache_unlock_click_index();
 			apc_cache_debug("write_clicks: Index key disappeared. Abandoning write", true);
@@ -346,7 +346,7 @@ function apc_cache_write_log() {
 	$key = APC_CACHE_LOG_INDEX;
 	$index = apc_fetch($key);
 	if($index === false) {
-		apc_cache_debug("write_log: APC_CACHE_LOG_INDEX has disappeared. Abandoning write.");
+		apc_cache_debug("write_log: key $key has disappeared. Abandoning write.");
 		apc_store(APC_CACHE_LOG_TIMER, time());
 		apc_delete(APC_CACHE_LOG_UPDATE_LOCK);
 		return $updates;
