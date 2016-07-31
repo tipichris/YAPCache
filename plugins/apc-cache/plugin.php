@@ -345,6 +345,12 @@ function apc_cache_write_log() {
 
 	$key = APC_CACHE_LOG_INDEX;
 	$index = apc_fetch($key);
+	if($index === false) {
+		apc_cache_debug("write_log: APC_CACHE_LOG_INDEX has disappeared. Abandoning write.");
+		apc_store(APC_CACHE_LOG_TIMER, time());
+		apc_delete(APC_CACHE_LOG_UPDATE_LOCK);
+		return $updates;
+	}
 	$fetched = 0;
 	$n = 0;
 	$loop = true;
