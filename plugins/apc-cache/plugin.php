@@ -14,7 +14,9 @@ if( !function_exists( 'apc_exists' ) ) {
 }
 
 // keys for APC storage
-define('APC_CACHE_ID', 'ycache-');
+if(!defined('APC_CACHE_ID')) {
+	define('APC_CACHE_ID', 'ycache-');
+}
 define('APC_CACHE_LOG_INDEX', APC_CACHE_ID . 'log_index');
 define('APC_CACHE_LOG_TIMER', APC_CACHE_ID . 'log_timer');
 define('APC_CACHE_LOG_UPDATE_LOCK', APC_CACHE_ID . 'log_update_lock');
@@ -295,13 +297,13 @@ function apc_cache_shunt_log_redirect($false, $keyword) {
 	if(!apc_exists(APC_CACHE_LOG_TIMER)) {
 		apc_add(APC_CACHE_LOG_TIMER, time());
 	}
-	
+	$ip = yourls_get_IP();
 	$args = array(
 		date( 'Y-m-d H:i:s' ),
 		yourls_sanitize_string( $keyword ),
 		( isset( $_SERVER['HTTP_REFERER'] ) ? yourls_sanitize_url( $_SERVER['HTTP_REFERER'] ) : 'direct' ),
 		yourls_get_user_agent(),
-		yourls_get_IP(),
+		$ip,
 		yourls_geo_ip_to_countrycode( $ip )
 	);
 	
@@ -680,8 +682,8 @@ function apc_cache_redirect_shorturl( $args ) {
 		header( "Location: $location" );
 		// force the headers to be sent
 		echo "Redirecting to $location\n";
-		ob_end_flush();
-		ob_flush();
+		@ob_end_flush();
+		@ob_flush();
 		flush();
 	} else {
 		yourls_redirect_javascript( $location );
