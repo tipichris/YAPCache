@@ -29,7 +29,6 @@ define("APC_CACHE_READ_TIMEOUT", 360);
 ### APC_CACHE_WRITE_TIMEOUT
 Interger. Default 120. Number of seconds to cache data before writing it out to the database. A value of 0 will disable writing based on time
 
-
 ### APC_CACHE_STATS_SHUNT
 Boolean. Default false. If true this will cause the caching of the clicks and logredirects to be disabled, and the queries logged as normal. This is handy if you want to keep the URL caching, but still have 100% accurate stats (though the benefit of the plugin will be pretty small then).
 
