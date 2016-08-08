@@ -17,6 +17,38 @@ Installation
 
 A recent version of APC is required.
 
+Operation
+---------
+
+### Caches
+
+There are four separate caches operated by the plugin: 
+
+**Keyword Cache**: A read cache which caches the keyword -> long URL look up in APC. This is done on request, and by default is cached for about one hour. This period is configurable with `APC_CACHE_READ_TIMEOUT`. This cache will be destroyed if updates are made to the keyword.
+
+**Options Cache**: A read cache which aches YOURLS options in APC to avoid the need to retrieve thse from the database at every request. Cache period is defined by `APC_CACHE_READ_TIMEOUT` and is one hour by default. This cache will be destroyed if any options are updated.
+
+**Click caching**: A write cache for records of clicks. Rather than writing directly to the database, we write clicks to APC. We keep a record of how long it is since we last wrote clicks to the database and if that period exceeds `APC_CACHE_WRITE_TIMEOUT` seconds (default 120) we write all cached clicks to the database. We also keep an eye on how many URLs we are caching click information for and will write to the database if this figure exceeds `APC_CACHE_MAX_UPDATES` (default 200). Since database writes can involve a lot of updates in quick succession, in either case, if the current server load exceeds `APC_CACHE_MAX_LOAD` we delay the write. We bundle update queries up in a single transaction, which will reduce the overhead involved considerably as long as your table supports transactions.
+
+**Log caching**: A write cache similar to the click tracking, but tracking the log entries for each request. Note that each request for the same URL will increase the number of log entries being cached. In contrast, multiple requests for the same URL will increase the number of clicks recorded in the cache for a single record. The consequence of this is that log caching is likely to reach `APC_CACHE_MAX_UPDATES` faster than click caching.
+
+### Flushing the cache with an API call
+
+It is also possible to manually flush the cache out to the database using an API call. If your YOURLS installation is private you will need to authenticate in the usual way. If `APC_CACHE_API_USER` is defined and no empty only the user defined can flush the cache. To flush you [construct an API call in the usual way](http://yourls.org/#API) using the action `flushcache`. eg
+
+```
+http://your-own-domain-here.com/yourls-api.php?action=flushcache&signature=1002a612b4
+```
+
+The API call is useful if you want to be sure that the cache will be written out at a defined interval even if there are periods when few requests are coming in. You can, for example, call it every five minutes from crontab with something likely
+
+```
+*/5  *  *  *  *  curl -s "https://your-own-domain-here.com/yourls-api.php?action=flushcache&signature=1002a612b4" > /dev/null
+```
+
+You might also consider flushing the cache before restarts of the webserver. Many log rotation scripts, for example, will restart Apache after rotating the log, so it can be useful to use a script to flush the cache immediately before the log is rotated. 
+
+
 Configuration
 -------------
 
@@ -41,7 +73,7 @@ A timeout used for a few long lasting indexes. You probably don't need to change
 
 ### APC_CACHE_LOCK_TIMEOUT
 _Interger. Default: 30._  
-Maximum number of seconds to hold a lock on the indexes whilst doing a database write. If things are working this shouldn't take anywhere near 30 seconds (may 2 maximum)
+Maximum number of seconds to hold a lock on the indexes whilst doing a database write. If things are working this shouldn't take anywhere near 30 seconds (maybe 2 maximum)
 
 ### APC_CACHE_MAX_LOAD
 _Interger. Default: 0.7._  
