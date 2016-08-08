@@ -26,15 +26,15 @@ There are four separate caches operated by the plugin:
 
 **Keyword Cache**: A read cache which caches the keyword -> long URL look up in APC. This is done on request, and by default is cached for about one hour. This period is configurable with `APC_CACHE_READ_TIMEOUT`. This cache will be destroyed if updates are made to the keyword.
 
-**Options Cache**: A read cache which aches YOURLS options in APC to avoid the need to retrieve thse from the database at every request. Cache period is defined by `APC_CACHE_READ_TIMEOUT` and is one hour by default. This cache will be destroyed if any options are updated.
+**Options Cache**: A read cache which caches YOURLS options in APC to avoid the need to retrieve these from the database at every request. Cache period is defined by `APC_CACHE_READ_TIMEOUT` and is one hour by default. This cache will be destroyed if any options are updated.
 
 **Click caching**: A write cache for records of clicks. Rather than writing directly to the database, we write clicks to APC. We keep a record of how long it is since we last wrote clicks to the database and if that period exceeds `APC_CACHE_WRITE_TIMEOUT` seconds (default 120) we write all cached clicks to the database. We also keep an eye on how many URLs we are caching click information for and will write to the database if this figure exceeds `APC_CACHE_MAX_UPDATES` (default 200). Since database writes can involve a lot of updates in quick succession, in either case, if the current server load exceeds `APC_CACHE_MAX_LOAD` we delay the write. We bundle update queries up in a single transaction, which will reduce the overhead involved considerably as long as your table supports transactions.
 
-**Log caching**: A write cache similar to the click tracking, but tracking the log entries for each request. Note that each request for the same URL will increase the number of log entries being cached. In contrast, multiple requests for the same URL will increase the number of clicks recorded in the cache for a single record. The consequence of this is that log caching is likely to reach `APC_CACHE_MAX_UPDATES` faster than click caching.
+**Log caching**: A write cache similar to the click tracking, but tracking the log entries for each request. Note that each request for the same URL will increase the number of log table records being cached. In contrast, multiple requests for the same URL will increase the number of clicks recorded in the cache for a single record for that URL. The consequence of this is that log caching is likely to reach `APC_CACHE_MAX_UPDATES` faster than click caching.
 
 ### Flushing the cache with an API call
 
-It is also possible to manually flush the cache out to the database using an API call. If your YOURLS installation is private you will need to authenticate in the usual way. If `APC_CACHE_API_USER` is defined and no empty only the user defined can flush the cache. To flush you [construct an API call in the usual way](http://yourls.org/#API) using the action `flushcache`. eg
+It is also possible to manually flush the cache out to the database using an API call. If your YOURLS installation is private you will need to authenticate in the usual way. If `APC_CACHE_API_USER` is defined and not empty only the user defined can flush the cache. To flush you [construct an API call in the usual way](http://yourls.org/#API) using the action `flushcache`. eg
 
 ```
 http://your-own-domain-here.com/yourls-api.php?action=flushcache&signature=1002a612b4
@@ -48,6 +48,11 @@ The API call is useful if you want to be sure that the cache will be written out
 
 You might also consider flushing the cache before restarts of the webserver. Many log rotation scripts, for example, will restart Apache after rotating the log, so it can be useful to use a script to flush the cache immediately before the log is rotated. 
 
+### Will you loose clicks?
+Almost certainly. Whilst we've taken care to try to minimise this there will be times when clicks and logs cached in APC disappear before they have been written to the database. APC is not really designed for holding volatile data. If it runs low on memory it will start pruning its cached data and that could mean clicks and logs. Webserver restarts will clear APC's cache, and on many systems these happen regularly when the logs are rotated. In deciding on suitable values for the various configuration options you will need to balance performance against the risk of loosing data. The longer you cache writes for, the more likely you are to loose data, and the more data you are likely to loose. 
+
+If loosing the odd click is unacceptable to you you probably shouldn't use this plugin.
+
 
 Configuration
 -------------
@@ -55,7 +60,7 @@ Configuration
 The plugin comes with working defaults, but you will probably want to adjust things to your particular needs. The following constants can be defined in `user/config.php` to alter the plugins behaviour, eg 
 
 ```php
-define("APC_CACHE_READ_TIMEOUT", 360);
+define("APC_CACHE_READ_TIMEOUT", 1800);
 ```
 
 ### APC_CACHE_WRITE_TIMEOUT
@@ -115,29 +120,14 @@ A string which is prepended to all APC keys. This is useful if you run two or mo
 
 ### APC_CACHE_DEBUG
 _Boolean. Default: false._  
-If true additional debug information is sent using PHP's `error_log()` function. You will find this whereever your server is configured to send PHP errors to.
+If true additional debug information is sent using PHP's `error_log()` function. You will find this wherever your server is configured to send PHP errors to.
 
 ### APC_CACHE_REDIRECT_FIRST
 _Boolean. Default: false._  
-Set this to true to send redirects to the client first, and deal with logging and database updates later. This is experimental and highly likely to interact badly with certain other plugins. In particular, is known to not work with some plugins which change the default HTTP status code to 302. To work around this use the APC_CACHE_REDIRECT_FIRST_CODE setting instead.
+Set this to true to send redirects to the client first, and deal with logging and database updates later. This is experimental and highly likely to interact badly with certain other plugins. In particular, it is known to not work with some plugins which change the default HTTP status code to 302. To work around this use the APC_CACHE_REDIRECT_FIRST_CODE setting instead.
 
 If you are potentially caching large numbers of updates, a request that triggers a database write may result in a slow response as normally the database writes are performed first, then a response is sent to the client. This option allows you to respond to the client first and do the slow stuff later. If you are only doing updates based on an API call this setting probably has no benefit and is best avoided.
 
 ### APC_CACHE_REDIRECT_FIRST_CODE
 _Interger. Default: 301_  
-The HTTP status code to send with redirects when APC_CACHE_REDIRECT_FIRST is true. Defaults to 301 (moved permanantly). 302 is the most likely alternative (although 303 or 307 are possible)
-
-What the plugin does
---------------------
-
-There are roughly four processes in the plugin: 
-
-Keyword Cache: We cache the keyword -> long URL look up in APC - this is done on request, and cached for about 2 minutes (this can be changed by tweaking the define)
-
-Options Cache: Just caches the get all options query
-
-Click caching: Rather than writing to the database, we will write first to APC. We also create another cache item, with an expiry of 2 minutes (unless changed). When we can create that timer (so there never was one, or a previous one had expired) we will write the click to the database along with any other clicks that have been tracked in the cache. Practically this means the first request hits the DB, then it will at maximum before one DB write per 2 minutes for click tracking. The downside is that you are almost guaranteed to miss some clicks - if the last person to click does trigger a DB write, their click will likely never be tracked. This was more than acceptable to us. 
-
-Log caching: Similar to the click tracking, but in this case we consider all log writes as separate events in the same buffer. We use an incrementing counter to track our unwritten logs, and after a 2 minute expiry using the same mechanism as before we will flush the cached log entries to the database. Log entries can still be lost, and of course APC may clear items to free cache space at any time, or on webserver restart. 
-
-This plugin is really only for a narrow range of cases - if you want full speed it's probably best to just disable logging any of the log/click information at all, so there are no writes because of it. If you want full information, it's best to log each click. That said, please report any issues in the Github issue tracker. 
+The HTTP status code to send with redirects when APC_CACHE_REDIRECT_FIRST is true. Defaults to 301 (moved permanantly). 302 is the most likely alternative (although 303 or 307 are possible). Has no effect if APC_CACHE_REDIRECT_FIRST is false
