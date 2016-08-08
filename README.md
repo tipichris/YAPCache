@@ -48,6 +48,8 @@ The API call is useful if you want to be sure that the cache will be written out
 
 You might also consider flushing the cache before restarts of the webserver. Many log rotation scripts, for example, will restart Apache after rotating the log, so it can be useful to use a script to flush the cache immediately before the log is rotated. 
 
+It is possible to disable writing to the database as part of a normal request by setting both `APC_CACHE_WRITE_TIMEOUT` and `APC_CACHE_MAX_UPDATES`. Writes to the database will then only be triggered by flushcache API call. As database writes can be slow this approach may improve user experience by ensuring that redirects are never delayed by writing data out to the database.
+
 ### Will you loose clicks?
 Almost certainly. Whilst we've taken care to try to minimise this there will be times when clicks and logs cached in APC disappear before they have been written to the database. APC is not really designed for holding volatile data. If it runs low on memory it will start pruning its cached data and that could mean clicks and logs. Webserver restarts will also clear APC's cache, and on many systems these happen regularly when the logs are rotated. In deciding on suitable values for the various configuration options you will need to balance performance against the risk of loosing data. The longer you cache writes for, the more likely you are to loose data, and the more data you are likely to loose. 
 
