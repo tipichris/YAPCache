@@ -28,7 +28,7 @@ There are four separate caches operated by the plugin:
 
 **Options Cache**: A read cache which caches YOURLS options in APC to avoid the need to retrieve these from the database at every request. Cache period is defined by `APC_CACHE_READ_TIMEOUT` and is one hour by default. This cache will be destroyed if any options are updated.
 
-**Click caching**: A write cache for records of clicks. Rather than writing directly to the database, we write clicks to APC. We keep a record of how long it is since we last wrote clicks to the database and if that period exceeds `APC_CACHE_WRITE_TIMEOUT` seconds (default 120) we write all cached clicks to the database. We also keep an eye on how many URLs we are caching click information for and will write to the database if this figure exceeds `APC_CACHE_MAX_UPDATES` (default 200). Since database writes can involve a lot of updates in quick succession, in either case, if the current server load exceeds `APC_CACHE_MAX_LOAD` we delay the write. We bundle update queries up in a single transaction, which will reduce the overhead involved considerably as long as your table supports transactions.
+**Click caching**: A write cache for records of clicks. Rather than writing directly to the database, we write clicks to APC. We keep a record of how long it is since we last wrote clicks to the database and if that period exceeds `APC_CACHE_WRITE_TIMEOUT` seconds (default 120) we write all cached clicks to the database. We also keep an eye on how many URLs we are caching click information for and will write to the database if this figure exceeds `APC_CACHE_MAX_UPDATES` (default 200). Additionally, if the number of clicks stored for a single URL exceeds `APC_CACHE_MAX_CLICKS` all clicks are written to the database. Since database writes can involve a lot of updates in quick succession, in either case, if the current server load exceeds `APC_CACHE_MAX_LOAD` we delay the write. We bundle update queries up in a single transaction, which will reduce the overhead involved considerably as long as your table supports transactions.
 
 **Log caching**: A write cache similar to the click tracking, but tracking the log entries for each request. Note that each request for the same URL will increase the number of log table records being cached. In contrast, multiple requests for the same URL will increase the number of clicks recorded in the cache for a single record for that URL. The consequence of this is that log caching is likely to reach `APC_CACHE_MAX_UPDATES` faster than click caching.
 
@@ -51,15 +51,14 @@ You might also consider flushing the cache before restarts of the webserver. Man
 It is possible to disable writing to the database as part of a normal request by setting both `APC_CACHE_WRITE_TIMEOUT` and `APC_CACHE_MAX_UPDATES`. Writes to the database will then only be triggered by flushcache API call. As database writes can be slow this approach may improve user experience by ensuring that redirects are never delayed by writing data out to the database.
 
 ### Will you loose clicks?
-Almost certainly. Whilst we've taken care to try to minimise this there will be times when clicks and logs cached in APC disappear before they have been written to the database. APC is not really designed for holding volatile data. If it runs low on memory it will start pruning its cached data and that could mean clicks and logs. Webserver restarts will also clear APC's cache, and on many systems these happen regularly when the logs are rotated. In deciding on suitable values for the various configuration options you will need to balance performance against the risk of loosing data. The longer you cache writes for, the more likely you are to loose data, and the more data you are likely to loose. 
+Almost certainly. Whilst we've taken care to try to minimise this there will be times when clicks and logs cached in APC disappear before they have been written to the database. APC is not really designed for holding volatile data that isn't stored elsewhere yet. If it runs low on memory it will start pruning its cached data and that could mean clicks and logs. Webserver restarts will also clear APC's cache, and on many systems these happen regularly when the logs are rotated. In deciding on suitable values for the various configuration options you will need to balance performance against the risk of loosing data. The longer you cache writes for, the more likely you are to loose data, and the more data you are likely to loose. 
 
 If loosing the odd click is unacceptable to you you probably shouldn't use this plugin.
-
 
 Configuration
 -------------
 
-The plugin comes with working defaults, but you will probably want to adjust things to your particular needs. The following constants can be defined in `user/config.php` to alter the plugins behaviour, eg 
+The plugin comes with working defaults, but you will probably want to adjust things to your particular needs. The following constants can be defined in `user/config.php` to alter the plugin's behaviour, eg 
 
 ```php
 define("APC_CACHE_READ_TIMEOUT", 1800);
@@ -68,7 +67,6 @@ define("APC_CACHE_READ_TIMEOUT", 1800);
 ### APC_CACHE_WRITE_TIMEOUT
 _Interger. Default: 120._  
 Number of seconds to cache data for before writing it out to the database. A value of 0 will disable writing based on time
-
 
 ### APC_CACHE_READ_TIMEOUT
 _Interger. Default: 3600._  
@@ -90,7 +88,7 @@ When the time cached exceeds APC_CACHE_WRITE_HARD_TIMEOUT writes will be done no
 
 ### APC_CACHE_WRITE_HARD_TIMEOUT
 _Interger. Default: 600._  
-Number of seconds before a write of cached data to the database is forced, even if the load exceeds APC_CACHE_WRITE_HARD_TIMEOUT.
+Number of seconds before a write of cached data to the database is forced, even if the load exceeds APC_CACHE_MAX_LOAD. This setting has no effect if APC_CACHE_WRITE_TIMEOUT is set to 0.
 
 ### APC_CACHE_BACKOFF_TIME
 _Interger. Default: 30._  
@@ -100,9 +98,13 @@ Number of seconds to delay the next attempt to write to the database if the load
 _Interger. Default: 200._  
 The maximum number of updates of each type (clicks and logs) to hold in the cache before writing out to the database. When the number of cached updates exceeds this value they will be written to the database, irrespective of how long they have been cached. However, they won't be written out if the load exceeds APC_CACHE_MAX_LOAD. A value of 0 means never write out on the basis of the number of cached updates.
 
+### APC_CACHE_MAX_CLICKS
+_Interger. Default: 30._  
+The maximum number of clicks that will be stored for a single URL. If a single URL has had more than this number of clicks since the last time the click cache was written to the database then a write will be performed. However, no write will be done if the load exceeds APC_CACHE_MAX_LOAD. A value of 0 disables this test.
+
 ### APC_CACHE_API_USER
 _String. Default: empty string_  
-The name of a user who is allowed to use the `flushcache` API call to force a write to the database. If set to false, the `flushcache` API call is disabled. If set to an empty string, and user may force a database write.
+The name of a user who is allowed to use the `flushcache` API call to force a write to the database. If set to false, the `flushcache` API call is disabled. If set to an empty string, any user may force a database write.
 
 ### APC_CACHE_STATS_SHUNT
 _Boolean. Default: false._  

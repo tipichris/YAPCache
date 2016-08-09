@@ -46,6 +46,9 @@ if(!defined('APC_CACHE_MAX_LOAD')) {
 if(!defined('APC_CACHE_MAX_UPDATES')) {
 	define('APC_CACHE_MAX_UPDATES', 200);
 }
+if(!defined('APC_CACHE_MAX_CLICKS')) {
+	define('APC_CACHE_MAX_CLICKS', 30);
+}
 if(!defined('APC_CACHE_BACKOFF_TIME')) {
 	define('APC_CACHE_BACKOFF_TIME', 30);
 }
@@ -192,11 +195,12 @@ function apc_cache_shunt_update_clicks($false, $keyword) {
 	
 	// Store in cache
 	$added = false; 
+	$clicks = 1;
 	if(!apc_exists($key)) {
-		$added = apc_add($key, 1);
+		$added = apc_add($key, $clicks);
 	}
 	if(!$added) {
-		apc_cache_key_increment($key);
+		$clicks = apc_cache_key_increment($key);
 	}
   
 	/* we need to keep a record of which keywords we have
@@ -214,7 +218,7 @@ function apc_cache_shunt_update_clicks($false, $keyword) {
 	apc_store ( $idxkey, $clickindex);
 	apc_cache_unlock_click_index();
 	
-	if(apc_cache_write_needed('click')) {
+	if(apc_cache_write_needed('click', $clicks)) {
 		apc_cache_write_clicks();
 	}
 	
@@ -553,9 +557,10 @@ function apc_cache_click_updates_count() {
  * Considers time since last write, system load etc
  *
  * @param string $type either 'click' or 'log' 
+ * @param int $clicks number of clicks cached for current URL
  * @return bool true if a DB write is due, false otherwise
  */
-function apc_cache_write_needed($type) {
+function apc_cache_write_needed($type, $clicks=0) {
 		
 	if($type == 'click') {
 		$timerkey = APC_CACHE_CLICK_TIMER;
@@ -569,6 +574,8 @@ function apc_cache_write_needed($type) {
 	if (empty($count)) $count = 0;
 	apc_cache_debug("write_needed: Info: $count $type updates in cache");
 	
+	if (!empty($clicks)) apc_cache_debug("write_needed: Info: current URL has $clicks cached clicks");
+	
 	if(apc_exists($timerkey)) {
 		$lastupdate = apc_fetch($timerkey);
 		$elapsed = time() - $lastupdate;
@@ -577,7 +584,8 @@ function apc_cache_write_needed($type) {
 		/**
 		 * in the tests below APC_CACHE_WRITE_TIMEOUT of 0 means never do a write on the basis of
 		 * time elapsed, APC_CACHE_MAX_UPDATES of 0 means never do a write on the basis of number 
-		 * of queued updates
+		 * of queued updates, APC_CACHE_MAX_CLICKS of 0 means never write on the basis of the number
+		 * clicks pending
 		 **/
 		 
 		// if we reached APC_CACHE_WRITE_HARD_TIMEOUT force a write out no matter what
@@ -592,9 +600,10 @@ function apc_cache_write_needed($type) {
 			return false;
 		}
 		
-		// have we either reached APC_CACHE_WRITE_TIMEOUT or exceeded APC_CACHE_MAX_UPDATES
+		// have we either reached APC_CACHE_WRITE_TIMEOUT or exceeded APC_CACHE_MAX_UPDATES or APC_CACHE_MAX_CLICKS
 		if(( !empty(APC_CACHE_WRITE_TIMEOUT) && $elapsed > APC_CACHE_WRITE_TIMEOUT )
-		    || ( !empty(APC_CACHE_MAX_UPDATES) && $count > APC_CACHE_MAX_UPDATES )) {
+		    || ( !empty(APC_CACHE_MAX_UPDATES) && $count > APC_CACHE_MAX_UPDATES )
+		    || (!empty(APC_CACHE_MAX_CLICKS) && !empty($clicks) && $clicks > APC_CACHE_MAX_CLICKS) ) {
 			// if server load is high, delay the write and set a backoff so we won't try again
 			// for a short while
 			if(apc_cache_load_too_high()) {
@@ -602,7 +611,7 @@ function apc_cache_write_needed($type) {
 				apc_add(APC_CACHE_BACKOFF_KEY, time(), APC_CACHE_BACKOFF_TIME);
 				return false;
 			}
-			apc_cache_debug("write_needed: True: type: $type; count: $count; elapsed: $elapsed; APC_CACHE_WRITE_TIMEOUT: " . APC_CACHE_WRITE_TIMEOUT . "; APC_CACHE_MAX_UPDATES: " . APC_CACHE_MAX_UPDATES );
+			apc_cache_debug("write_needed: True: type: $type; count: $count; elapsed: $elapsed; clicks: $clicks; APC_CACHE_WRITE_TIMEOUT: " . APC_CACHE_WRITE_TIMEOUT . "; APC_CACHE_MAX_UPDATES: " . APC_CACHE_MAX_UPDATES . "; APC_CACHE_MAX_CLICKS: " . APC_CACHE_MAX_CLICKS);
 			return true;
 		}
 
