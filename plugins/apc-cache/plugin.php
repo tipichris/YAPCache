@@ -253,9 +253,11 @@ function apc_cache_write_clicks() {
 		foreach ($clickindex as $keyword => $z) {
 			$key = APC_CACHE_CLICK_KEY_PREFIX . $keyword;
 			$value = 0;
-			if(apc_exists($key)) {
-				$value += apc_cache_key_zero($key);
+			if(!apc_exists($key)) {
+				apc_cache_debug("write_clicks: Click key $key dissappeared. Possible data loss!", true);
+				continue;
 			}
+			$value += apc_cache_key_zero($key);
 			apc_cache_debug("write_clicks: Adding $value clicks for $keyword");
 			// Write value to DB
 			$ydb->query("UPDATE `" . 
@@ -361,7 +363,12 @@ function apc_cache_write_log() {
 	// Retrieve all items and reset the counter
 	while($loop) {
 		for($i = $fetched+1; $i <= $index; $i++) {
-			$values[] = apc_fetch(apc_cache_get_logindex($i));
+			$row = apc_fetch(apc_cache_get_logindex($i));
+			if($row === false) {
+				apc_cache_debug("write_log: log entry " . apc_cache_get_logindex($i) . " disappeared. Possible data loss!!", true);
+			} else {
+				$values[] = $row;
+			}
 		}
 		
 		$fetched = $index;
@@ -379,6 +386,10 @@ function apc_cache_write_log() {
 	$query = "";
 
 	foreach($values as $value) {
+		if(!is_array($value)) {
+		  apc_cache_debug("write_log: log row is not an array. Skipping");
+		  continue;
+		}
 		if(strlen($query)) {
 			$query .= ",";
 		}
@@ -436,7 +447,7 @@ function apc_cache_key_increment($key) {
 		usleep(500);
 		$n++;
 	}
-	if($n > 1) apc_cache_debug("key_increment: took $n tries");
+	if($n > 1) apc_cache_debug("key_increment: took $n tries on key $key");
 	return $result;
 }
 
@@ -458,11 +469,11 @@ function apc_cache_key_zero($key) {
 		$n++;
 		$old = apc_fetch($key);
 		if($old == 0) {
-			apc_cache_debug("key_zero: Key zeroed by someone else. Try $n");
+			apc_cache_debug("key_zero: Key zeroed by someone else. Try $n. Key $key");
 			return $old;
 		}
 	}
-	if($n > 1) apc_cache_debug("key_zero: Key zeroed from $old after $n tries");
+	if($n > 1) apc_cache_debug("key_zero: Key $key zeroed from $old after $n tries");
 	return $old;
 }
 
