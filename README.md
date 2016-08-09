@@ -30,7 +30,7 @@ There are four separate caches operated by the plugin:
 
 **Click caching**: A write cache for records of clicks. Rather than writing directly to the database, we write clicks to APC. We keep a record of how long it is since we last wrote clicks to the database and if that period exceeds `APC_CACHE_WRITE_TIMEOUT` seconds (default 120) we write all cached clicks to the database. We also keep an eye on how many URLs we are caching click information for and will write to the database if this figure exceeds `APC_CACHE_MAX_UPDATES` (default 200). Additionally, if the number of clicks stored for a single URL exceeds `APC_CACHE_MAX_CLICKS` all clicks are written to the database. Since database writes can involve a lot of updates in quick succession, in either case, if the current server load exceeds `APC_CACHE_MAX_LOAD` we delay the write. We bundle update queries up in a single transaction, which will reduce the overhead involved considerably as long as your table supports transactions.
 
-**Log caching**: A write cache similar to the click tracking, but tracking the log entries for each request. Note that each request for the same URL will increase the number of log table records being cached. In contrast, multiple requests for the same URL will increase the number of clicks recorded in the cache for a single record for that URL. The consequence of this is that log caching is likely to reach `APC_CACHE_MAX_UPDATES` faster than click caching.
+**Log caching**: A write cache similar to the click tracking, but tracking the log entries for each request. Note that each request for the same URL will increase the number of log table records being cached. In contrast, multiple requests for the same URL will not increase the number of records being cached, only the number of clicks recorded in a single record. The consequence of this is that log caching is likely to reach `APC_CACHE_MAX_UPDATES` faster than click caching.
 
 ### Flushing the cache with an API call
 
@@ -107,12 +107,10 @@ _String. Default: empty string_
 The name of a user who is allowed to use the `flushcache` API call to force a write to the database. If set to false, the `flushcache` API call is disabled. If set to an empty string, any user may force a database write.
 
 ### APC_CACHE_STATS_SHUNT
-_Boolean. Default: false._  
-If true this will cause the caching of the clicks and logredirects to be disabled, and the queries logged as normal. This is handy if you want to keep the URL caching, but still have 100% accurate stats (though the benefit of the plugin will be pretty small then).
+_String. Default: Undefined._  
+If set to `none` this will cause the caching of the clicks and logredirects to be disabled, and the queries logged as normal. This is handy if you want to keep the URL caching, but still have 100% accurate stats (though the benefit of the plugin will be pretty small then).
 
-### APC_CACHE_STATS_SHUNT
-_Boolean. Default: false._  
-If true this will cause the clicks and log redirect information to be dropped completely (a more aggressive NOSTATS) - so there will be no clicks or logredirects logged.
+If set to `drop` this will cause the clicks and log redirect information to be dropped completely (a more aggressive NOSTATS). There will be no clicks or logredirects logged.
 
 ### APC_CACHE_SKIP_CLICKTRACK
 _Boolean. Default: false._  
