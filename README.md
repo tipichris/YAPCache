@@ -1,7 +1,7 @@
 APC Cache
 =========
 
-An APCu based caching plugin for the [YOURLS](http://yourls.org/) URL shortener. 
+An APC based caching plugin for the [YOURLS](http://yourls.org/) URL shortener. 
 
 This plugin is designed to remove a lot of the database traffic from YOURLS, primarily the write load from doing the logging and click tracking. We have attempted to strike a balance between keeping most information, but spilling it in some cases in the name of higher performance. 
 
@@ -9,10 +9,10 @@ This plugin is designed to remove a lot of the database traffic from YOURLS, pri
 Installation
 ------------
 
-1. Download the latest apc-cache-plugin.
-2. Copy the plugin folder into your user/plugins folder for YOURLS.
-3. Set up the parameters for apc-cache-plugin in YOURLS configuration user/config.php (see below).
-4. Copy the cache.php file into user/.
+1. Download the latest apc-cache plugin
+2. Copy the plugin folder into your user/plugins folder for YOURLS
+3. Set up the parameters for apc-cache in YOURLS configuration user/config.php ([see below](#configuration))
+4. Copy the cache.php file into user/
 5. There is no need to activate this plugin
 
 A recent version of APC is required.
