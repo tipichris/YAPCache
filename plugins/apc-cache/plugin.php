@@ -1,11 +1,11 @@
 <?php
 /*
-Plugin Name: APC Cache
-Plugin URI: http://virgingroupdigital.wordpress.com
-Description: Caches most database traffic at the expense of some accuracy
-Version: 0.3.2
-Author: Ian Barber <ian.barber@gmail.com>
-Author URI: http://phpir.com/
+Plugin Name: YAPCache
+Plugin URI: https://github.com/tipichris/YAPCache
+Description: An APC based cache to reduce database load.
+Version: 0.1
+Author: Ian Barber, Chris Hastie
+Author URI: http://www.oak-wood.co.uk
 */
 
 // Verify APC is installed, suggested by @ozh
