@@ -5,7 +5,7 @@ YAPCache is an APC based caching plugin for the [YOURLS](http://yourls.org/) URL
 
 YAPCache is designed to remove a lot of the database traffic from YOURLS, primarily the write load from doing the logging and click tracking. We have attempted to strike a balance between keeping most information, but spilling it in some cases in the name of higher performance. 
 
-YAPCache is a fork of [Ian Barber's YOURLS APC Cache}(https://github.com/ianbarber/Yourls-APC-Cache), with a few changes listed below. It retains many of the function and constant names found in that plugin, as well as the same directory structure. The two plugins cannot co-exist on the same installation.
+YAPCache is a fork of [Ian Barber's YOURLS APC Cache](https://github.com/ianbarber/Yourls-APC-Cache), with a few changes [listed below](#difference-from-yourls-apc-cache). It retains many of the function and constant names found in that plugin, as well as the same directory structure. The two plugins cannot co-exist on the same installation.
 
 
 Installation
@@ -141,17 +141,22 @@ Difference from Yourls-APC-Cache
 
 The main differences between YAPCache and Ian Barber's original Yourls-APC-Cache are summarised below
 
-* Different strategy for caching clicks. Instead of one timer for each URL, YAPCache uses a single timer for all URLs. This is somewhat more aggressive, ie clicks are more likely to be cached. It also means that multiple URLs are updated at the same time. By wrapping these in a transaction the transaction overhead is reduced (ie one transaction for multiple updates, rather than the one transaction per update implied by autocommit)
+* YAPCache uses a different strategy for caching clicks. Instead of one timer for each URL, YAPCache uses a single timer for all URLs. This is somewhat more aggressive, ie clicks are more likely to be cached. It also means that multiple URLs are updated at the same time. By wrapping these in a transaction the transaction overhead is reduced (ie one transaction for multiple updates, rather than the one transaction per update implied by autocommit)
 
-* Different approach to timers. YAPCache writes the time into an APC key and then checks that, rather than relying on the key's TTL. This allows a bit more flexibility in the logic of when to write out to the database, allowing some other changes, including
+* YAPCache uses a different approach to timers. YAPCache writes the time into an APC key and then checks that, rather than relying on the key's TTL. This allows a bit more flexibility in the logic of when to write out to the database, allowing some other changes, including
 
-  * Option to do writes on the basis of number of records cached as well as / instead of time since last write
+  * Option to do writes on the basis of the number of records cached as well as / instead of the time since the last write
 
   * Writes can be delayed if the server load exceeds a threshold
 
-  * An API call that can be used to trigger a write out to the database. 
+  * YAPCache provides an API call that can be used to trigger a write out to the database. 
 
-* Experimental option to send the redirect first and delay the slower work of updated the database until afterwards
+* YAPCache includes an experimental option to send the redirect to the client first and delay the slower work of updated the database until afterwards
 
-* A few minor bug fixes
+* A few minor bugs have been fixed
+
+### Which one should you use?
+
+It's your choice. YAPCache has a few extra features. Yourls-APC-Cache is older and has been in use for several years longer.
+
 
