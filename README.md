@@ -1,17 +1,19 @@
-APC Cache
+YAPCCache
 =========
 
-An APC based caching plugin for the [YOURLS](http://yourls.org/) URL shortener. 
+YAPCache is an APC based caching plugin for the [YOURLS](http://yourls.org/) URL shortener. 
 
-This plugin is designed to remove a lot of the database traffic from YOURLS, primarily the write load from doing the logging and click tracking. We have attempted to strike a balance between keeping most information, but spilling it in some cases in the name of higher performance. 
+YAPCache is designed to remove a lot of the database traffic from YOURLS, primarily the write load from doing the logging and click tracking. We have attempted to strike a balance between keeping most information, but spilling it in some cases in the name of higher performance. 
+
+YAPCache is a fork of [Ian Barber's YOURLS APC Cache}(https://github.com/ianbarber/Yourls-APC-Cache), with a few changes listed below. It retains many of the function and constant names found in that plugin, as well as the same directory structure. The two plugins cannot co-exist on the same installation.
 
 
 Installation
 ------------
 
-1. Download the latest apc-cache plugin
+1. Download the latest version of YAPCache
 2. Copy the plugin folder into your user/plugins folder for YOURLS
-3. Set up the parameters for apc-cache in YOURLS configuration user/config.php ([see below](#configuration))
+3. Set up the parameters for YAPCache in YOURLS configuration user/config.php ([see below](#configuration))
 4. Copy the cache.php file into user/
 5. There is no need to activate this plugin
 
@@ -133,3 +135,23 @@ If you are potentially caching large numbers of updates, a request that triggers
 ### APC_CACHE_REDIRECT_FIRST_CODE
 _Interger. Default: 301_  
 The HTTP status code to send with redirects when APC_CACHE_REDIRECT_FIRST is true. Defaults to 301 (moved permanantly). 302 is the most likely alternative (although 303 or 307 are possible). Has no effect if APC_CACHE_REDIRECT_FIRST is false
+
+Difference from Yourls-APC-Cache
+--------------------------------
+
+The main differences between YAPCache and Ian Barber's original Yourls-APC-Cache are summarised below
+
+* Different strategy for caching clicks. Instead of one timer for each URL, YAPCache uses a single timer for all URLs. This is somewhat more aggressive, ie clicks are more likely to be cached. It also means that multiple URLs are updated at the same time. By wrapping these in a transaction the transaction overhead is reduced (ie one transaction for multiple updates, rather than the one transaction per update implied by autocommit)
+
+* Different approach to timers. YAPCache writes the time into an APC key and then checks that, rather than relying on the key's TTL. This allows a bit more flexibility in the logic of when to write out to the database, allowing some other changes, including
+
+  * Option to do writes on the basis of number of records cached as well as / instead of time since last write
+
+  * Writes can be delayed if the server load exceeds a threshold
+
+  * An API call that can be used to trigger a write out to the database. 
+
+* Experimental option to send the redirect first and delay the slower work of updated the database until afterwards
+
+* A few minor bug fixes
+
