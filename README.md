@@ -1,5 +1,5 @@
-YAPCCache
-=========
+YAPCache
+========
 
 YAPCache is an APC based caching plugin for the [YOURLS](http://yourls.org/) URL shortener. 
 
