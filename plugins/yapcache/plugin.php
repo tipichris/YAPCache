@@ -3,7 +3,7 @@
 Plugin Name: YAPCache
 Plugin URI: https://github.com/tipichris/YAPCache
 Description: An APC based cache to reduce database load.
-Version: 0.1
+Version: 1.0
 Author: Ian Barber, Chris Hastie
 Author URI: http://www.oak-wood.co.uk
 */

@@ -3,7 +3,7 @@ YAPCache
 
 YAPCache is an APC based caching plugin for the [YOURLS](http://yourls.org/) URL shortener. 
 
-YAPCache is designed to remove a lot of the database traffic from YOURLS, primarily the write load from doing the logging and click tracking. We have attempted to strike a balance between keeping most information, but spilling it in some cases in the name of higher performance. 
+YAPCache is designed to remove a lot of the database traffic from YOURLS, primarily the write load from doing the logging and click tracking. We have attempted to strike a balance between keeping most information, but spilling it in some cases in the name of higher performance. YAPCache will write data back to the database based on either the time since the last write or the amount of data currently cached. YAPCache also adds an [API call](#flushing-the-cache-with-an-api-call) to YOURLS that can be used to force a write out to the database.
 
 YAPCache is a fork of [Ian Barber's YOURLS APC Cache](https://github.com/ianbarber/Yourls-APC-Cache), with a few changes [listed below](#difference-from-yourls-apc-cache). You should not try to install both plugins at the same time!
 
