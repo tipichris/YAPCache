@@ -5,12 +5,13 @@ YAPCache is an APC based caching plugin for the [YOURLS](http://yourls.org/) URL
 
 YAPCache is designed to remove a lot of the database traffic from YOURLS, primarily the write load from doing the logging and click tracking. We have attempted to strike a balance between keeping most information, but spilling it in some cases in the name of higher performance. 
 
-YAPCache is a fork of [Ian Barber's YOURLS APC Cache](https://github.com/ianbarber/Yourls-APC-Cache), with a few changes [listed below](#difference-from-yourls-apc-cache). It retains many of the function and constant names found in that plugin, as well as the same directory structure. The two plugins cannot co-exist on the same installation.
+YAPCache is a fork of [Ian Barber's YOURLS APC Cache](https://github.com/ianbarber/Yourls-APC-Cache), with a few changes [listed below](#difference-from-yourls-apc-cache). You should not try to install both plugins at the same time!
 
 
 Installation
 ------------
 
+0. If you previously used another APC cache with YOURLS, uninstall it
 1. Download the latest version of YAPCache
 2. Copy the plugin folder into your user/plugins folder for YOURLS
 3. Set up the parameters for YAPCache in YOURLS configuration user/config.php ([see below](#configuration))
