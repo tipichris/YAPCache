@@ -52,8 +52,8 @@ if(!defined('YAPC_MAX_CLICKS')) {
 if(!defined('YAPC_BACKOFF_TIME')) {
 	define('YAPC_BACKOFF_TIME', 30);
 }
-if(!defined('YAPC_WRITE_HARD_TIMEOUT')) {
-	define('YAPC_WRITE_HARD_TIMEOUT', 600);
+if(!defined('YAPC_WRITE_CACHE_HARD_TIMEOUT')) {
+	define('YAPC_WRITE_CACHE_HARD_TIMEOUT', 600);
 }
 if(!defined('YAPC_LOCK_TIMEOUT')) {
 	define('YAPC_LOCK_TIMEOUT', 30);
@@ -588,9 +588,9 @@ function yapc_write_needed($type, $clicks=0) {
 		 * clicks pending
 		 **/
 		 
-		// if we reached YAPC_WRITE_HARD_TIMEOUT force a write out no matter what
-		if ( !empty(YAPC_WRITE_CACHE_TIMEOUT) && $elapsed > YAPC_WRITE_HARD_TIMEOUT) {
-			yapc_debug("write_needed: True: Reached hard timeout (" . YAPC_WRITE_HARD_TIMEOUT ."). Forcing write for $type after $elapsed seconds");
+		// if we reached YAPC_WRITE_CACHE_HARD_TIMEOUT force a write out no matter what
+		if ( !empty(YAPC_WRITE_CACHE_TIMEOUT) && $elapsed > YAPC_WRITE_CACHE_HARD_TIMEOUT) {
+			yapc_debug("write_needed: True: Reached hard timeout (" . YAPC_WRITE_CACHE_HARD_TIMEOUT ."). Forcing write for $type after $elapsed seconds");
 			return true;
 		}
 		

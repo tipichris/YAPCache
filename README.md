@@ -86,9 +86,9 @@ Maximum number of seconds to hold a lock on the indexes whilst doing a database 
 _Interger. Default: 0.7._  
 If the system load exceeds this value apc-cache will delay writes to the database. A sensible value for this will depend, amongst other things, on how many processors you have. A value of 0 means don't check the load before writing. This setting has no effect on Windows.
 
-When the time cached exceeds YAPC_WRITE_HARD_TIMEOUT writes will be done no matter what the load.
+When the time cached exceeds YAPC_WRITE_CACHE_HARD_TIMEOUT writes will be done no matter what the load.
 
-### YAPC_WRITE_HARD_TIMEOUT
+### YAPC_WRITE_CACHE_HARD_TIMEOUT
 _Interger. Default: 600._  
 Number of seconds before a write of cached data to the database is forced, even if the load exceeds YAPC_MAX_LOAD. This setting has no effect if YAPC_WRITE_CACHE_TIMEOUT is set to 0.
 
