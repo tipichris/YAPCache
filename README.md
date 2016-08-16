@@ -13,10 +13,10 @@ Installation
 
 0. If you previously used another APC cache with YOURLS, uninstall it
 1. Download the latest version of YAPCache
-2. Copy the plugin folder into your user/plugins folder for YOURLS
-3. Set up the parameters for YAPCache in YOURLS configuration user/config.php ([see below](#configuration))
-4. Copy the cache.php file into user/
-5. There is no need to activate this plugin
+2. Copy the `plugins/yapcache` folder into your `user/plugins` folder for YOURLS
+3. Set up the parameters for YAPCache in your YOURLS configuration file, `user/config.php` ([see below](#configuration))
+4. Copy the `cache.php` file into `user/`
+5. There is no need to activate this plugin (by the same token, deactivating it via the admin panel will not disable it—to do that remove or rename `user/cache.php`)
 
 A recent version of APC is required.
 
@@ -51,10 +51,10 @@ The API call is useful if you want to be sure that the cache will be written out
 
 You might also consider flushing the cache before restarts of the webserver. Many log rotation scripts, for example, will restart Apache after rotating the log, so it can be useful to use a script to flush the cache immediately before the log is rotated. 
 
-It is possible to disable writing to the database as part of a normal request by setting both `YAPC_WRITE_CACHE_TIMEOUT` and `YAPC_MAX_UPDATES`. Writes to the database will then only be triggered by flushcache API call. As database writes can be slow this approach may improve user experience by ensuring that redirects are never delayed by writing data out to the database.
+It is possible to disable writing to the database as part of a normal request by setting both `YAPC_WRITE_CACHE_TIMEOUT` and `YAPC_MAX_UPDATES` to 0. Writes to the database will then only be triggered by the flushcache API call. As database writes can be slow this approach may improve user experience by ensuring that redirects are never delayed by writing data out to the database.
 
 ### Will you loose clicks?
-Almost certainly. Whilst we've taken care to try to minimise this there will be times when clicks and logs cached in APC disappear before they have been written to the database. APC is not really designed for holding volatile data that isn't stored elsewhere yet. If it runs low on memory it will start pruning its cached data and that could mean clicks and logs. Webserver restarts will also clear APC's cache, and on many systems these happen regularly when the logs are rotated. In deciding on suitable values for the various configuration options you will need to balance performance against the risk of loosing data. The longer you cache writes for, the more likely you are to loose data, and the more data you are likely to loose. 
+Almost certainly. Whilst we've taken care to try to minimise this there will be times when clicks and logs cached in APC disappear before they have been written to the database. APC is not ideal for holding volatile data that isn't stored elsewhere yet. If it runs low on memory it will start pruning its cached data and that could mean clicks and logs. Webserver restarts will also clear APC's cache, and on many systems these happen regularly when the logs are rotated. In deciding on suitable values for the various configuration options you will need to balance performance against the risk of loosing data. The longer you cache writes for, the more likely you are to loose data, and the more data you are likely to loose. 
 
 If loosing the odd click is unacceptable to you you probably shouldn't use this plugin.
 
@@ -142,11 +142,11 @@ Difference from Yourls-APC-Cache
 
 The main differences between YAPCache and Ian Barber's original Yourls-APC-Cache are summarised below
 
-* YAPCache uses a different strategy for caching clicks. Instead of one timer for each URL, YAPCache uses a single timer for all URLs. This is somewhat more aggressive, ie clicks are more likely to be cached. It also means that multiple URLs are updated at the same time. By wrapping these in a transaction the transaction overhead is reduced (ie one transaction for multiple updates, rather than the one transaction per update implied by autocommit)
+* YAPCache uses a different strategy for caching clicks. Instead of one timer for each URL, YAPCache uses a single timer for all URLs. This is somewhat more aggressive, ie clicks are more likely to be cached. It also means that multiple URLs are updated in the database at the same time. By wrapping these in a transaction the transaction overhead is reduced (ie one transaction for multiple updates, rather than the one transaction per update implied by autocommit)
 
 * YAPCache uses a different approach to timers. YAPCache writes the time into an APC key and then checks that, rather than relying on the key's TTL. This allows a bit more flexibility in the logic of when to write out to the database, allowing some other changes, including
 
-  * Option to do writes on the basis of the number of records cached as well as / instead of the time since the last write
+  * An option to do writes on the basis of the number of records cached as well as / instead of the time since the last write
 
   * Writes can be delayed if the server load exceeds a threshold
 
@@ -154,10 +154,10 @@ The main differences between YAPCache and Ian Barber's original Yourls-APC-Cache
 
 * YAPCache includes an experimental option to send the redirect to the client first and delay the slower work of updated the database until afterwards
 
-* A few minor bugs have been fixed
+* A few minor bugs have been fixed (ianbarber/Yourls-APC-Cache/#7, ianbarber/Yourls-APC-Cache/#9)
 
 ### Which one should you use?
 
-It's your choice. YAPCache has a few extra features. Yourls-APC-Cache is older and has been in use for several years longer.
+It's your choice. YAPCache has a few extra features—if you need these, use YAPCache. Yourls-APC-Cache is older and has been in use for several years longer. It is more tested (although not without bugs). YAPCache is based on this mature code, but it does include some substantial changes that as yet have had only limited testing in a production environment.
 
 
