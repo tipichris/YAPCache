@@ -154,7 +154,7 @@ The main differences between YAPCache and Ian Barber's original Yourls-APC-Cache
 
 * YAPCache includes an experimental option to send the redirect to the client first and delay the slower work of updated the database until afterwards
 
-* A few minor bugs have been fixed: ianbarber/Yourls-APC-Cache#7, ianbarber/Yourls-APC-Cache#9
+* A few minor bugs have been fixed
 
 ### Which one should you use?
 
