@@ -245,6 +245,7 @@ function yapc_write_clicks() {
 			// if apc_delete fails it's because the key went away. We probably have a race condition
 			yapc_unlock_click_index();
 			yapc_debug("write_clicks: Index key disappeared. Abandoning write", true);
+			apc_store(YAPC_CLICK_TIMER, time());
 			return $updates; 
 		}
 		yapc_unlock_click_index();
@@ -272,8 +273,8 @@ function yapc_write_clicks() {
 		}
 		yapc_debug("write_clicks: Committing changes");
 		$ydb->query("COMMIT");
-		apc_store(YAPC_CLICK_TIMER, time());
 	}
+	apc_store(YAPC_CLICK_TIMER, time());
 	apc_delete(YAPC_CLICK_UPDATE_LOCK);
 	yapc_debug("write_clicks: Updated click records for $updates URLs");
 	return $updates;
