@@ -92,8 +92,13 @@ function yapc_shunt_all_options($false) {
 	
 	$key = YAPC_ALL_OPTIONS; 
 	if(apc_exists($key)) {
-		$ydb->option = apc_fetch($key);
-		$ydb->installed = apc_fetch(YAPC_YOURLS_INSTALLED);
+		$options = apc_fetch($key);
+		if (is_array($options)) {
+			foreach ($options as $name => $value) {
+				$this->ydb->set_option($name, $value);
+			}
+		}
+		$ydb->set_installed(apc_fetch(YAPC_YOURLS_INSTALLED));
 		return true;
 	} 
 	
@@ -135,7 +140,8 @@ function yapc_pre_get_keyword($args) {
 	
 	// Lookup in cache
 	if($use_cache && apc_exists(yapc_get_keyword_key($keyword))) {
-		$ydb->infos[$keyword] = apc_fetch(yapc_get_keyword_key($keyword)); 	
+		$ydb->set_infos($keyword, apc_fetch(yapc_get_keyword_key($keyword)));
+
 	}
 }
 
@@ -147,7 +153,9 @@ function yapc_pre_get_keyword($args) {
  */
 function yapc_get_keyword_infos($info, $keyword) {
 	// Store in cache
-	apc_store(yapc_get_keyword_key($keyword), $info, YAPC_READ_CACHE_TIMEOUT);
+	if($info) {
+		apc_store(yapc_get_keyword_key($keyword), $info, YAPC_READ_CACHE_TIMEOUT);
+	}
 	return $info;
 }
 
@@ -190,7 +198,7 @@ function yapc_shunt_update_clicks($false, $keyword) {
 		}
 	} 
 	
-	$keyword = yourls_sanitize_string( $keyword );
+	$keyword = yourls_sanitize_keyword( $keyword );
 	$key = YAPC_CLICK_KEY_PREFIX . $keyword;
 	
 	// Store in cache
@@ -254,7 +262,7 @@ function yapc_write_clicks() {
 		* up into a single transaction. Reduces the overhead of starting a transaction for each
 		* query. The down side is that if one query errors we'll loose the log
 		*/
-		$ydb->query("START TRANSACTION");
+		$ydb->beginTransaction();
 		foreach ($clickindex as $keyword => $z) {
 			$key = YAPC_CLICK_KEY_PREFIX . $keyword;
 			$value = 0;
@@ -265,14 +273,14 @@ function yapc_write_clicks() {
 			$value += yapc_key_zero($key);
 			yapc_debug("write_clicks: Adding $value clicks for $keyword");
 			// Write value to DB
-			$ydb->query("UPDATE `" . 
-							YOURLS_DB_TABLE_URL. 
-						"` SET `clicks` = clicks + " . $value . 
-						" WHERE `keyword` = '" . $keyword . "'");
+			$ydb->perform("UPDATE `" .
+							YOURLS_DB_TABLE_URL.
+						"` SET `clicks` = clicks + :value" .
+						" WHERE `keyword` = :keyword", ['value' => $value, 'keyword' => $keyword]);
 			$updates++;
 		}
 		yapc_debug("write_clicks: Committing changes");
-		$ydb->query("COMMIT");
+		$ydb->commit();
 	}
 	apc_store(YAPC_CLICK_TIMER, time());
 	apc_delete(YAPC_CLICK_UPDATE_LOCK);
@@ -307,7 +315,7 @@ function yapc_shunt_log_redirect($false, $keyword) {
 	$ip = yourls_get_IP();
 	$args = array(
 		date( 'Y-m-d H:i:s' ),
-		yourls_sanitize_string( $keyword ),
+		yourls_sanitize_keyword( $keyword ),
 		( isset( $_SERVER['HTTP_REFERER'] ) ? yourls_sanitize_url( $_SERVER['HTTP_REFERER'] ) : 'direct' ),
 		yourls_get_user_agent(),
 		$ip,
@@ -387,31 +395,27 @@ function yapc_write_log() {
 		}
 	}
 	yapc_debug("write_log: $fetched log entries retrieved; index reset after $n tries");
-	// Insert all log message - we're assuming input filtering happened earlier
-	$query = "";
 
+	$ydb->beginTransaction();
+	$stmt = $ydb->prepare( "INSERT INTO `" . YOURLS_DB_TABLE_LOG . "`
+				(click_time, shorturl, referrer, user_agent, ip_address, country_code)
+				VALUES (:click_time, :shorturl, :referrer, :user_agent, :ip_address, :country_code)");
 	foreach($values as $value) {
 		if(!is_array($value)) {
 		  yapc_debug("write_log: log row is not an array. Skipping");
 		  continue;
 		}
-		if(strlen($query)) {
-			$query .= ",";
-		}
-		$row = "('" . 
-			$value[0] . "', '" . 
-			$value[1] . "', '" . 
-			$value[2] . "', '" . 
-			$value[3] . "', '" . 
-			$value[4] . "', '" . 
-			$value[5] . "')";
-		yapc_debug("write_log: row: $row");
-		$query .= $row;
+		$stmt->execute([
+			'click_time' => $value[0],
+			'shorturl' => $value[1],
+			'referrer' => $value[2],
+			'user_agent' => $value[3],
+			'ip_address' => $value[4],
+			'country_code' => $value[5]]
+		);
 		$updates++;
 	}
-	$ydb->query( "INSERT INTO `" . YOURLS_DB_TABLE_LOG . "` 
-				(click_time, shorturl, referrer, user_agent, ip_address, country_code)
-				VALUES " . $query);
+	$ydb->commit();
 	apc_store(YAPC_LOG_TIMER, time());
 	apc_delete(YAPC_LOG_UPDATE_LOCK);
 	yapc_debug("write_log: Added $updates entries to log");
